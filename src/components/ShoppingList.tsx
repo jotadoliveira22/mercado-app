@@ -1,8 +1,9 @@
-import { useState, useMemo } from 'react';
-import { Plus, Trash2, ChevronDown, ChevronRight, ShoppingCart } from 'lucide-react';
+import { useState, useMemo, useCallback } from 'react';
+import { Plus, Trash2, ChevronDown, ChevronRight, ShoppingCart, ScanLine } from 'lucide-react';
 import type { ShoppingItem, Category, Unit } from '../types';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import { categorizeProduct } from '../utils/categorize';
+import BarcodeScanner from './BarcodeScanner';
 
 const ALL_CATEGORIES: Category[] = [
   'Lácteos', 'Carnes', 'Frutas y Verduras', 'Panadería', 'Bebidas',
@@ -28,6 +29,8 @@ export default function ShoppingList() {
   const [quantity, setQuantity] = useState('1');
   const [unit, setUnit] = useState<Unit>('Und');
   const [collapsedCategories, setCollapsedCategories] = useState<Set<Category>>(new Set());
+  const [showScanner, setShowScanner] = useState(false);
+  const [loadingProduct, setLoadingProduct] = useState(false);
 
   const groupedItems = useMemo(() => {
     const groups: Partial<Record<Category, ShoppingItem[]>> = {};
@@ -58,6 +61,21 @@ export default function ShoppingList() {
     setQuantity('1');
   };
 
+  const handleScan = useCallback(async (barcode: string) => {
+    setShowScanner(false);
+    setLoadingProduct(true);
+    try {
+      const res = await fetch(`https://world.openfoodfacts.org/api/v0/product/${barcode}.json`);
+      const data = await res.json();
+      const name = data?.product?.product_name_es || data?.product?.product_name || '';
+      setInput(name || barcode);
+    } catch {
+      setInput(barcode);
+    } finally {
+      setLoadingProduct(false);
+    }
+  }, []);
+
   const toggleItem = (id: string) => {
     setItems(prev => prev.map(i => i.id === id ? { ...i, checked: !i.checked } : i));
   };
@@ -81,6 +99,10 @@ export default function ShoppingList() {
 
   return (
     <div className="flex flex-col h-full">
+      {showScanner && (
+        <BarcodeScanner onScan={handleScan} onClose={() => setShowScanner(false)} />
+      )}
+
       {/* Header */}
       <div className="bg-green-700 px-4 py-4 shadow-md">
         <div className="flex items-center gap-2 mb-3">
@@ -109,12 +131,20 @@ export default function ShoppingList() {
         <div className="flex gap-2">
           <input
             type="text"
-            value={input}
+            value={loadingProduct ? 'Buscando producto...' : input}
             onChange={e => setInput(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && addItem()}
             placeholder="Agregar producto..."
+            disabled={loadingProduct}
             className="flex-1 border border-gray-300 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
           />
+          <button
+            onClick={() => setShowScanner(true)}
+            className="bg-green-100 hover:bg-green-200 text-green-700 rounded-xl px-3 py-2 flex items-center transition-colors"
+            title="Escanear código de barras"
+          >
+            <ScanLine size={20} />
+          </button>
           <button
             onClick={addItem}
             className="bg-green-700 text-white rounded-xl px-4 py-2 hover:bg-green-600 active:bg-green-800 transition-colors"
@@ -154,7 +184,7 @@ export default function ShoppingList() {
           <div className="flex flex-col items-center justify-center h-full text-gray-400 gap-3 py-16">
             <ShoppingCart size={48} strokeWidth={1} />
             <p className="text-base">Tu lista está vacía</p>
-            <p className="text-sm">Agrega productos para comenzar</p>
+            <p className="text-sm">Agrega productos manualmente o escanea un código</p>
           </div>
         ) : (
           <>
@@ -188,9 +218,7 @@ export default function ShoppingList() {
                           <button
                             onClick={() => toggleItem(item.id)}
                             className={`w-6 h-6 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-colors ${
-                              item.checked
-                                ? 'bg-green-500 border-green-500'
-                                : 'border-gray-300'
+                              item.checked ? 'bg-green-500 border-green-500' : 'border-gray-300'
                             }`}
                           >
                             {item.checked && (

@@ -1,8 +1,100 @@
 import { useState, useCallback } from 'react';
 import type { ExchangeRates } from '../types';
 
-const BCV_URL = 'https://ve.dolarapi.com/v1/dolares/oficial';
-const BINANCE_URL = 'https://ve.dolarapi.com/v1/dolares/binance';
+// Binance P2P: mismo endpoint que usa el script de Google Sheets
+const BINANCE_P2P_URL = 'https://p2p.binance.com/bapi/c2c/v2/friendly/c2c/adv/search';
+
+// BCV via proxy CORS público (bcv.org.ve bloquea CORS directo desde browser)
+const BCV_PROXY_URLS = [
+  'https://ve.dolarapi.com/v1/dolares/oficial',
+  'https://pydolarve.org/api/v1/dollar?monitor=bcv',
+];
+
+const BINANCE_PROXY_URLS = [
+  'https://ve.dolarapi.com/v1/dolares/binance',
+  'https://pydolarve.org/api/v1/dollar?monitor=binance',
+];
+
+async function fetchBCV(): Promise<number | null> {
+  // Intento 1: dolarapi
+  try {
+    const res = await fetch(BCV_PROXY_URLS[0]);
+    if (res.ok) {
+      const data = await res.json();
+      const val = data.promedio ?? data.precio ?? null;
+      if (val && val > 0) return Number(val);
+    }
+  } catch { /* continúa */ }
+
+  // Intento 2: pydolarve
+  try {
+    const res = await fetch(BCV_PROXY_URLS[1]);
+    if (res.ok) {
+      const data = await res.json();
+      const val = data.price ?? data.promedio ?? null;
+      if (val && val > 0) return Number(val);
+    }
+  } catch { /* continúa */ }
+
+  // Intento 3: Binance P2P directo para obtener el precio de mercado
+  return null;
+}
+
+async function fetchBinanceP2P(): Promise<number | null> {
+  // Intento 1: dolarapi
+  try {
+    const res = await fetch(BINANCE_PROXY_URLS[0]);
+    if (res.ok) {
+      const data = await res.json();
+      const val = data.promedio ?? data.precio ?? null;
+      if (val && val > 0) return Number(val);
+    }
+  } catch { /* continúa */ }
+
+  // Intento 2: pydolarve
+  try {
+    const res = await fetch(BINANCE_PROXY_URLS[1]);
+    if (res.ok) {
+      const data = await res.json();
+      const val = data.price ?? data.promedio ?? null;
+      if (val && val > 0) return Number(val);
+    }
+  } catch { /* continúa */ }
+
+  // Intento 3: Binance P2P directo (mismo que el Google Apps Script)
+  try {
+    const res = await fetch(BINANCE_P2P_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        fiat: 'VES',
+        page: 1,
+        rows: 10,
+        tradeType: 'BUY',
+        asset: 'USDT',
+        countries: [],
+        proMerchantAds: false,
+        shieldMerchantAds: false,
+        filterType: 'all',
+        periods: [],
+        additionalKycVerifyFilter: 0,
+        publisherType: null,
+        payTypes: [],
+        classifies: ['mass', 'profession'],
+      }),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      const ads = data?.data ?? [];
+      for (const ad of ads) {
+        const price = parseFloat(ad?.adv?.price);
+        if (!isNaN(price) && price > 0) return price;
+      }
+    }
+  } catch { /* continúa */ }
+
+  return null;
+}
 
 export function useExchangeRates() {
   const [rates, setRates] = useState<ExchangeRates>({
@@ -17,26 +109,14 @@ export function useExchangeRates() {
     setLoading(true);
     setError(null);
     try {
-      const [bcvRes, binanceRes] = await Promise.allSettled([
-        fetch(BCV_URL),
-        fetch(BINANCE_URL),
-      ]);
-
-      let bcv: number | null = null;
-      let binance: number | null = null;
-
-      if (bcvRes.status === 'fulfilled' && bcvRes.value.ok) {
-        const data = await bcvRes.value.json();
-        bcv = data.promedio ?? data.precio ?? null;
-      }
-
-      if (binanceRes.status === 'fulfilled' && binanceRes.value.ok) {
-        const data = await binanceRes.value.json();
-        binance = data.promedio ?? data.precio ?? null;
-      }
+      const [bcv, binance] = await Promise.all([fetchBCV(), fetchBinanceP2P()]);
 
       if (bcv === null && binance === null) {
         setError('No se pudieron obtener las tasas. Ingrese manualmente.');
+      } else if (bcv === null) {
+        setError('Tasa BCV no disponible. Ingrese manualmente.');
+      } else if (binance === null) {
+        setError('Tasa Binance no disponible. Ingrese manualmente.');
       }
 
       setRates({ bcv, binance, lastUpdated: Date.now() });
