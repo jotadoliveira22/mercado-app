@@ -1,41 +1,51 @@
-import { useState, useCallback } from 'react'
-import type { TasaCambio } from '../types'
+import { useState, useCallback } from 'react';
+import type { ExchangeRates } from '../types';
+
+const BCV_URL = 'https://ve.dolarapi.com/v1/dolares/oficial';
+const BINANCE_URL = 'https://ve.dolarapi.com/v1/dolares/binance';
 
 export function useExchangeRates() {
-  const [tasas, setTasas] = useState<TasaCambio>({
+  const [rates, setRates] = useState<ExchangeRates>({
     bcv: null,
     binance: null,
-    ultimaActualizacion: null,
-  })
-  const [cargando, setCargando] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+    lastUpdated: null,
+  });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const fetchTasas = useCallback(async () => {
-    setCargando(true)
-    setError(null)
+  const fetchRates = useCallback(async () => {
+    setLoading(true);
+    setError(null);
     try {
-      const [resBcv, resBinance] = await Promise.all([
-        fetch('https://ve.dolarapi.com/v1/dolares/oficial'),
-        fetch('https://ve.dolarapi.com/v1/dolares/binance'),
-      ])
-      const bcvData = await resBcv.json()
-      const binanceData = await resBinance.json()
-      setTasas({
-        bcv: Number(bcvData.promedio),
-        binance: Number(binanceData.promedio),
-        ultimaActualizacion: new Date().toLocaleString('es-VE'),
-      })
+      const [bcvRes, binanceRes] = await Promise.allSettled([
+        fetch(BCV_URL),
+        fetch(BINANCE_URL),
+      ]);
+
+      let bcv: number | null = null;
+      let binance: number | null = null;
+
+      if (bcvRes.status === 'fulfilled' && bcvRes.value.ok) {
+        const data = await bcvRes.value.json();
+        bcv = data.promedio ?? data.precio ?? null;
+      }
+
+      if (binanceRes.status === 'fulfilled' && binanceRes.value.ok) {
+        const data = await binanceRes.value.json();
+        binance = data.promedio ?? data.precio ?? null;
+      }
+
+      if (bcv === null && binance === null) {
+        setError('No se pudieron obtener las tasas. Ingrese manualmente.');
+      }
+
+      setRates({ bcv, binance, lastUpdated: Date.now() });
     } catch {
-      setError('No se pudo obtener las tasas. Ingresa los valores manualmente.')
+      setError('Error de conexión. Ingrese las tasas manualmente.');
     } finally {
-      setCargando(false)
+      setLoading(false);
     }
-  }, [])
+  }, []);
 
-  const setManual = useCallback((bcv: number, binance: number) => {
-    setTasas({ bcv, binance, ultimaActualizacion: new Date().toLocaleString('es-VE') })
-    setError(null)
-  }, [])
-
-  return { tasas, cargando, error, fetchTasas, setManual }
+  return { rates, setRates, loading, error, fetchRates };
 }
