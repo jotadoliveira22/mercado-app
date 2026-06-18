@@ -1,0 +1,16 @@
+{
+  "name": "MercadoApp",
+  "short_name": "MercadoApp",
+  "description": "Lista de compras y calculadora de mercado",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#15803d",
+  "theme_color": "#15803d",
+  "icons": [
+    {
+      "src": "/vite.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}
