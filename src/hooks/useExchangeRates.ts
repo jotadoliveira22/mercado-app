@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import type { ExchangeRates } from '../types';
 
 // Binance P2P: mismo endpoint que usa el script de Google Sheets
@@ -126,6 +126,8 @@ export function useExchangeRates() {
       setLoading(false);
     }
   }, []);
+
+  useEffect(() => { fetchRates(); }, [fetchRates]);
 
   return { rates, setRates, loading, error, fetchRates };
 }
