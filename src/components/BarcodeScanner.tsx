@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { BrowserMultiFormatReader, BrowserCodeReader } from '@zxing/browser';
-import { BarcodeFormat, DecodeHintType } from '@zxing/library';
+import Quagga from '@ericblade/quagga2';
 import { X, Loader2 } from 'lucide-react';
 
 interface BarcodeScannerProps {
@@ -8,114 +7,71 @@ interface BarcodeScannerProps {
   onClose: () => void;
 }
 
-// Polyfill type for the native BarcodeDetector API
-interface NativeBarcodeDetector {
-  detect(image: HTMLVideoElement | HTMLCanvasElement): Promise<Array<{ rawValue: string }>>;
-}
-declare const BarcodeDetector: {
-  new(opts: { formats: string[] }): NativeBarcodeDetector;
-  getSupportedFormats?(): Promise<string[]>;
-};
-
 export default function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps) {
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const streamRef = useRef<MediaStream | null>(null);
-  const animFrameRef = useRef<number>(0);
-  const controlsRef = useRef<{ stop: () => void } | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const doneRef = useRef(false);
   const [status, setStatus] = useState<'starting' | 'scanning' | 'error'>('starting');
   const [errorMsg, setErrorMsg] = useState('');
 
-  const finish = (code: string) => {
-    if (doneRef.current) return;
-    doneRef.current = true;
-    onScan(code);
-  };
-
   useEffect(() => {
-    const hasNative = typeof BarcodeDetector !== 'undefined';
+    let started = false;
 
-    if (hasNative) {
-      // --- Native BarcodeDetector (Chrome Android 83+) ---
-      const detector = new BarcodeDetector({
-        formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39', 'qr_code'],
-      });
-
-      navigator.mediaDevices
-        .getUserMedia({ video: { facingMode: 'environment', width: { ideal: 1280 } } })
-        .then(stream => {
-          streamRef.current = stream;
-          const video = videoRef.current!;
-          video.srcObject = stream;
-          video.play();
-          setStatus('scanning');
-
-          const tick = async () => {
-            if (doneRef.current) return;
-            if (video.readyState === video.HAVE_ENOUGH_DATA) {
-              try {
-                const results = await detector.detect(video);
-                if (results.length > 0) {
-                  stream.getTracks().forEach(t => t.stop());
-                  finish(results[0].rawValue);
-                  return;
-                }
-              } catch { /* continue */ }
-            }
-            animFrameRef.current = requestAnimationFrame(tick);
-          };
-          animFrameRef.current = requestAnimationFrame(tick);
-        })
-        .catch(e => {
+    Quagga.init(
+      {
+        inputStream: {
+          type: 'LiveStream',
+          target: containerRef.current!,
+          constraints: {
+            width: { min: 640 },
+            height: { min: 480 },
+            facingMode: 'environment',
+            aspectRatio: { min: 1, max: 2 },
+          },
+        },
+        locator: { patchSize: 'medium', halfSample: true },
+        numOfWorkers: navigator.hardwareConcurrency > 2 ? 2 : 1,
+        frequency: 10,
+        decoder: {
+          readers: [
+            'ean_reader',
+            'ean_8_reader',
+            'upc_reader',
+            'upc_e_reader',
+            'code_128_reader',
+            'code_39_reader',
+          ],
+        },
+        locate: true,
+      },
+      (err) => {
+        if (err) {
           setStatus('error');
-          setErrorMsg(e instanceof Error ? e.message : 'No se pudo acceder a la cámara');
-        });
-    } else {
-      // --- @zxing fallback with EAN hints ---
-      const hints = new Map();
-      hints.set(DecodeHintType.POSSIBLE_FORMATS, [
-        BarcodeFormat.EAN_13,
-        BarcodeFormat.EAN_8,
-        BarcodeFormat.UPC_A,
-        BarcodeFormat.UPC_E,
-        BarcodeFormat.CODE_128,
-        BarcodeFormat.CODE_39,
-        BarcodeFormat.QR_CODE,
-      ]);
-      hints.set(DecodeHintType.TRY_HARDER, true);
+          setErrorMsg(err instanceof Error ? err.message : String(err));
+          return;
+        }
+        started = true;
+        Quagga.start();
+        setStatus('scanning');
+      }
+    );
 
-      const reader = new BrowserMultiFormatReader(hints);
-
-      BrowserCodeReader.listVideoInputDevices()
-        .then(async devices => {
-          const rear = devices.find(d => /back|rear|environment/i.test(d.label));
-          const deviceId = rear?.deviceId ?? devices[devices.length - 1]?.deviceId;
-
-          setStatus('scanning');
-          const controls = await reader.decodeFromVideoDevice(
-            deviceId,
-            videoRef.current!,
-            (result, _err, ctrl) => {
-              if (result && !doneRef.current) {
-                doneRef.current = true;
-                ctrl.stop();
-                onScan(result.getText());
-              }
-            }
-          );
-          controlsRef.current = controls;
-        })
-        .catch(e => {
-          setStatus('error');
-          setErrorMsg(e instanceof Error ? e.message : 'No se pudo acceder a la cámara');
-        });
-    }
+    Quagga.onDetected((result) => {
+      const code = result?.codeResult?.code;
+      if (!code || doneRef.current) return;
+      // Require confidence — only accept if decodedCodes have low error
+      const errors = result.codeResult.decodedCodes
+        .filter(c => c.error !== undefined)
+        .map(c => c.error as number);
+      const avgErr = errors.length ? errors.reduce((a, b) => a + b, 0) / errors.length : 1;
+      if (avgErr > 0.25) return;
+      doneRef.current = true;
+      Quagga.stop();
+      onScan(code);
+    });
 
     return () => {
-      cancelAnimationFrame(animFrameRef.current);
-      streamRef.current?.getTracks().forEach(t => t.stop());
-      controlsRef.current?.stop();
+      if (started) Quagga.stop();
+      Quagga.offDetected();
     };
   }, [onScan]);
 
@@ -137,24 +93,22 @@ export default function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps)
           )}
           {status === 'error' && (
             <div className="flex flex-col items-center gap-3 py-8 text-center">
-              <p className="text-sm text-red-500 font-medium">Error de cámara</p>
+              <p className="text-sm text-red-500 font-medium">Error al iniciar cámara</p>
               <p className="text-xs text-gray-400">{errorMsg}</p>
               <button onClick={onClose} className="mt-2 bg-green-700 text-white rounded-xl px-4 py-2 text-sm">
                 Cerrar
               </button>
             </div>
           )}
-          <video
-            ref={videoRef}
-            className={`w-full rounded-xl ${status !== 'scanning' ? 'hidden' : ''}`}
-            style={{ maxHeight: '300px', objectFit: 'cover' }}
-            playsInline
-            muted
+          {/* Quagga renders video+canvas here */}
+          <div
+            ref={containerRef}
+            className={`w-full rounded-xl overflow-hidden relative ${status !== 'scanning' ? 'hidden' : ''}`}
+            style={{ height: '260px' }}
           />
-          <canvas ref={canvasRef} className="hidden" />
           {status === 'scanning' && (
             <p className="text-center text-sm text-gray-500 mt-3">
-              Apunta la cámara al código de barras del producto
+              Centra el código de barras en la cámara
             </p>
           )}
         </div>

@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { Plus, Trash2, Edit2, Check, X, RefreshCw, Camera, DollarSign, AlertCircle } from 'lucide-react';
-import type { TrackerItem, ExchangeRates } from '../types';
+import type { TrackerItem, ExchangeRates, Unit } from '../types';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import { useExchangeRates } from '../hooks/useExchangeRates';
 import BarcodeScanner from './BarcodeScanner';
@@ -10,13 +10,13 @@ export default function CostTracker() {
   const { rates, setRates, loading, error, fetchRates } = useExchangeRates();
   const [showScanner, setShowScanner] = useState(false);
   const [manualBcv, setManualBcv] = useState('');
-  const [manualBinance, setManualBinance] = useState('');
-  const [showManualRates, setShowManualRates] = useState(false);
+  const [manualBinance, setManualBinance] = useState(
+    () => String(rates.binance ?? '')
+  );
 
-  // Form state
-  const [form, setForm] = useState({ name: '', quantity: '1', unitPrice: '' });
+  const [form, setForm] = useState({ name: '', quantity: '1', unitPrice: '', unit: 'Und' as Unit });
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState({ name: '', quantity: '1', unitPrice: '' });
+  const [editForm, setEditForm] = useState({ name: '', quantity: '1', unitPrice: '', unit: 'Und' as Unit });
   const [loadingProduct, setLoadingProduct] = useState(false);
 
   const totalUSD = items.reduce((sum, i) => sum + i.quantity * i.unitPrice, 0);
@@ -27,10 +27,10 @@ export default function CostTracker() {
     try {
       const res = await fetch(`https://world.openfoodfacts.org/api/v0/product/${barcode}.json`);
       const data = await res.json();
-      const productName = data?.product?.product_name || data?.product?.product_name_es || '';
-      setForm(prev => ({ ...prev, name: productName }));
+      const productName = data?.product?.product_name_es || data?.product?.product_name || '';
+      setForm(prev => ({ ...prev, name: productName || barcode }));
     } catch {
-      setForm(prev => ({ ...prev, name: '' }));
+      setForm(prev => ({ ...prev, name: barcode }));
     } finally {
       setLoadingProduct(false);
     }
@@ -41,22 +41,16 @@ export default function CostTracker() {
     const quantity = parseFloat(form.quantity);
     const unitPrice = parseFloat(form.unitPrice);
     if (!name || isNaN(quantity) || isNaN(unitPrice) || quantity <= 0 || unitPrice < 0) return;
-
-    const newItem: TrackerItem = {
-      id: crypto.randomUUID(),
-      name,
-      quantity,
-      unitPrice,
-    };
+    const newItem: TrackerItem = { id: crypto.randomUUID(), name, quantity, unitPrice, unit: form.unit };
     setItems(prev => [...prev, newItem]);
-    setForm({ name: '', quantity: '1', unitPrice: '' });
+    setForm({ name: '', quantity: '1', unitPrice: '', unit: 'Und' });
   };
 
   const deleteItem = (id: string) => setItems(prev => prev.filter(i => i.id !== id));
 
   const startEdit = (item: TrackerItem) => {
     setEditingId(item.id);
-    setEditForm({ name: item.name, quantity: String(item.quantity), unitPrice: String(item.unitPrice) });
+    setEditForm({ name: item.name, quantity: String(item.quantity), unitPrice: String(item.unitPrice), unit: item.unit ?? 'Und' });
   };
 
   const saveEdit = (id: string) => {
@@ -65,20 +59,24 @@ export default function CostTracker() {
       name: editForm.name.trim() || i.name,
       quantity: parseFloat(editForm.quantity) || i.quantity,
       unitPrice: parseFloat(editForm.unitPrice) ?? i.unitPrice,
+      unit: editForm.unit,
     } : i));
     setEditingId(null);
   };
 
-  const applyManualRates = () => {
-    const bcv = parseFloat(manualBcv);
-    const binance = parseFloat(manualBinance);
-    setRates((prev: ExchangeRates) => ({
-      ...prev,
-      bcv: isNaN(bcv) ? prev.bcv : bcv,
-      binance: isNaN(binance) ? prev.binance : binance,
-      lastUpdated: Date.now(),
-    }));
-    setShowManualRates(false);
+  const applyBinance = () => {
+    const b = parseFloat(manualBinance);
+    if (!isNaN(b) && b > 0) {
+      setRates((prev: ExchangeRates) => ({ ...prev, binance: b, lastUpdated: Date.now() }));
+    }
+  };
+
+  const applyBcv = () => {
+    const b = parseFloat(manualBcv);
+    if (!isNaN(b) && b > 0) {
+      setRates((prev: ExchangeRates) => ({ ...prev, bcv: b, lastUpdated: Date.now() }));
+      setManualBcv('');
+    }
   };
 
   const formatBs = (usd: number, rate: number | null) => {
@@ -94,7 +92,6 @@ export default function CostTracker() {
           <DollarSign className="text-white" size={22} />
           <h1 className="text-white font-bold text-xl">Calculadora de Mercado</h1>
         </div>
-        {/* Total cards */}
         <div className="grid grid-cols-3 gap-2">
           <div className="bg-green-600 rounded-xl px-3 py-2 text-center">
             <p className="text-green-200 text-xs font-medium">Total USD</p>
@@ -111,69 +108,66 @@ export default function CostTracker() {
         </div>
       </div>
 
-      {/* Exchange rate bar */}
-      <div className="bg-white border-b border-gray-100 px-4 py-2">
-        <div className="flex items-center justify-between flex-wrap gap-1">
-          <div className="flex items-center gap-3 text-xs text-gray-600">
-            <span>BCV: <span className="font-semibold text-gray-800">{rates.bcv ? `Bs ${rates.bcv.toFixed(2)}` : '—'}</span></span>
-            <span>Binance: <span className="font-semibold text-gray-800">{rates.binance ? `Bs ${rates.binance.toFixed(2)}` : '—'}</span></span>
-            {rates.lastUpdated && (
-              <span className="text-gray-400">
-                {new Date(rates.lastUpdated).toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit' })}
-              </span>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setShowManualRates(v => !v)}
-              className="text-xs text-green-700 underline"
-            >
-              Manual
-            </button>
-            <button
-              onClick={fetchRates}
-              disabled={loading}
-              className="text-green-700 hover:text-green-600 disabled:opacity-50"
-            >
-              <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
-            </button>
-          </div>
+      {/* Rate bar */}
+      <div className="bg-white border-b border-gray-100 px-4 py-2 space-y-2">
+        {/* BCV row */}
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-gray-500 w-16 flex-shrink-0">BCV:</span>
+          {rates.bcv ? (
+            <span className="text-xs font-semibold text-gray-800 flex-1">Bs {rates.bcv.toFixed(2)}</span>
+          ) : (
+            <div className="flex flex-1 gap-1">
+              <input
+                type="number"
+                placeholder="Ingrese tasa BCV"
+                value={manualBcv}
+                onChange={e => setManualBcv(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && applyBcv()}
+                className="flex-1 border border-gray-300 rounded-lg px-2 py-1 text-xs"
+              />
+              <button onClick={applyBcv} className="bg-green-700 text-white rounded-lg px-2 py-1 text-xs">OK</button>
+            </div>
+          )}
+          <button
+            onClick={fetchRates}
+            disabled={loading}
+            className="text-green-700 hover:text-green-600 disabled:opacity-50 flex-shrink-0"
+            title="Actualizar BCV"
+          >
+            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+          </button>
         </div>
-        {error && (
-          <div className="flex items-center gap-1 mt-1 text-xs text-amber-600">
-            <AlertCircle size={12} />
-            <span>{error}</span>
-          </div>
-        )}
-        {showManualRates && (
-          <div className="mt-2 flex items-center gap-2">
+
+        {/* Binance row — always manual */}
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-gray-500 w-16 flex-shrink-0">Binance:</span>
+          <div className="flex flex-1 gap-1">
             <input
               type="number"
-              placeholder="BCV"
-              value={manualBcv}
-              onChange={e => setManualBcv(e.target.value)}
-              className="flex-1 border border-gray-300 rounded-lg px-2 py-1 text-xs"
-            />
-            <input
-              type="number"
-              placeholder="Binance"
+              placeholder="Tasa Binance manual"
               value={manualBinance}
               onChange={e => setManualBinance(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && applyBinance()}
               className="flex-1 border border-gray-300 rounded-lg px-2 py-1 text-xs"
             />
-            <button
-              onClick={applyManualRates}
-              className="bg-green-700 text-white rounded-lg px-3 py-1 text-xs"
-            >
-              OK
-            </button>
+            <button onClick={applyBinance} className="bg-green-700 text-white rounded-lg px-2 py-1 text-xs">OK</button>
+          </div>
+          {rates.binance && (
+            <span className="text-xs font-semibold text-gray-800 flex-shrink-0">Bs {rates.binance.toFixed(2)}</span>
+          )}
+        </div>
+
+        {error && (
+          <div className="flex items-center gap-1 text-xs text-amber-600">
+            <AlertCircle size={12} />
+            <span>{error}</span>
           </div>
         )}
       </div>
 
       {/* Add product form */}
-      <div className="px-4 py-3 bg-gray-50 border-b border-gray-100">
-        <div className="flex gap-2 mb-2">
+      <div className="px-4 py-3 bg-gray-50 border-b border-gray-100 space-y-2">
+        <div className="flex gap-2">
           <input
             type="text"
             value={loadingProduct ? 'Buscando producto...' : form.name}
@@ -198,8 +192,22 @@ export default function CostTracker() {
             placeholder="Cant."
             min="0.1"
             step="0.1"
-            className="w-20 border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+            className="w-20 border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 text-center"
           />
+          <div className="flex rounded-xl overflow-hidden border border-gray-300">
+            <button
+              onClick={() => setForm(prev => ({ ...prev, unit: 'Und' }))}
+              className={`px-3 py-2 text-sm font-medium transition-colors ${form.unit === 'Und' ? 'bg-green-700 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+            >
+              Und
+            </button>
+            <button
+              onClick={() => setForm(prev => ({ ...prev, unit: 'Kg' }))}
+              className={`px-3 py-2 text-sm font-medium transition-colors ${form.unit === 'Kg' ? 'bg-green-700 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+            >
+              Kg
+            </button>
+          </div>
           <input
             type="number"
             value={form.unitPrice}
@@ -241,20 +249,27 @@ export default function CostTracker() {
                       type="number"
                       value={editForm.quantity}
                       onChange={e => setEditForm(prev => ({ ...prev, quantity: e.target.value }))}
-                      className="w-20 border border-gray-300 rounded-lg px-3 py-1.5 text-sm"
+                      className="w-16 border border-gray-300 rounded-lg px-2 py-1.5 text-sm text-center"
                     />
+                    <div className="flex rounded-lg overflow-hidden border border-gray-300">
+                      <button
+                        onClick={() => setEditForm(prev => ({ ...prev, unit: 'Und' }))}
+                        className={`px-2 py-1 text-xs font-medium transition-colors ${editForm.unit === 'Und' ? 'bg-green-700 text-white' : 'bg-white text-gray-600'}`}
+                      >Und</button>
+                      <button
+                        onClick={() => setEditForm(prev => ({ ...prev, unit: 'Kg' }))}
+                        className={`px-2 py-1 text-xs font-medium transition-colors ${editForm.unit === 'Kg' ? 'bg-green-700 text-white' : 'bg-white text-gray-600'}`}
+                      >Kg</button>
+                    </div>
                     <input
                       type="number"
                       value={editForm.unitPrice}
                       onChange={e => setEditForm(prev => ({ ...prev, unitPrice: e.target.value }))}
-                      className="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-sm"
+                      className="flex-1 border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
+                      placeholder="USD"
                     />
-                    <button onClick={() => saveEdit(item.id)} className="text-green-600 hover:text-green-700">
-                      <Check size={18} />
-                    </button>
-                    <button onClick={() => setEditingId(null)} className="text-gray-400 hover:text-gray-600">
-                      <X size={18} />
-                    </button>
+                    <button onClick={() => saveEdit(item.id)} className="text-green-600 hover:text-green-700"><Check size={18} /></button>
+                    <button onClick={() => setEditingId(null)} className="text-gray-400 hover:text-gray-600"><X size={18} /></button>
                   </div>
                 </div>
               ) : (
@@ -262,7 +277,7 @@ export default function CostTracker() {
                   <div className="flex-1 min-w-0">
                     <p className="font-medium text-gray-800 text-sm truncate">{item.name}</p>
                     <p className="text-xs text-gray-500">
-                      {item.quantity} × ${item.unitPrice.toFixed(2)}
+                      {item.quantity} {item.unit ?? 'Und'} × ${item.unitPrice.toFixed(2)}
                     </p>
                   </div>
                   <div className="text-right flex-shrink-0">
@@ -272,12 +287,8 @@ export default function CostTracker() {
                     )}
                   </div>
                   <div className="flex gap-1 flex-shrink-0">
-                    <button onClick={() => startEdit(item)} className="text-gray-400 hover:text-blue-500 p-1">
-                      <Edit2 size={14} />
-                    </button>
-                    <button onClick={() => deleteItem(item.id)} className="text-gray-400 hover:text-red-400 p-1">
-                      <Trash2 size={14} />
-                    </button>
+                    <button onClick={() => startEdit(item)} className="text-gray-400 hover:text-blue-500 p-1"><Edit2 size={14} /></button>
+                    <button onClick={() => deleteItem(item.id)} className="text-gray-400 hover:text-red-400 p-1"><Trash2 size={14} /></button>
                   </div>
                 </div>
               )}
@@ -286,12 +297,8 @@ export default function CostTracker() {
         )}
       </div>
 
-      {/* Barcode Scanner Modal */}
       {showScanner && (
-        <BarcodeScanner
-          onScan={handleScan}
-          onClose={() => setShowScanner(false)}
-        />
+        <BarcodeScanner onScan={handleScan} onClose={() => setShowScanner(false)} />
       )}
     </div>
   );

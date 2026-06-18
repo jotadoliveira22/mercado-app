@@ -27,6 +27,7 @@ export interface TrackerItem {
   name: string;
   quantity: number;
   unitPrice: number;
+  unit: Unit;
   barcode?: string;
 }
 

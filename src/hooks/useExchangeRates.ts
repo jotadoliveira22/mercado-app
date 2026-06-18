@@ -1,6 +1,17 @@
 import { useState, useCallback, useEffect } from 'react';
 import type { ExchangeRates } from '../types';
 
+async function fetchBCV(): Promise<number | null> {
+  try {
+    const res = await fetch('/api/rates');
+    if (!res.ok) return null;
+    const data = await res.json() as { bcv: number | null };
+    return data.bcv ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export function useExchangeRates() {
   const [rates, setRates] = useState<ExchangeRates>({
     bcv: null,
@@ -14,21 +25,11 @@ export function useExchangeRates() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch('/api/rates');
-      if (!res.ok) throw new Error('Error al obtener tasas');
-      const data = await res.json() as { bcv: number | null; binance: number | null };
-
-      if (!data.bcv && !data.binance) {
-        setError('No se pudieron obtener las tasas. Ingrese manualmente.');
-      } else if (!data.binance) {
-        setError('Tasa Binance no disponible. Ingrese manualmente.');
-      } else if (!data.bcv) {
-        setError('Tasa BCV no disponible. Ingrese manualmente.');
-      }
-
-      setRates({ bcv: data.bcv, binance: data.binance, lastUpdated: Date.now() });
+      const bcv = await fetchBCV();
+      if (!bcv) setError('Tasa BCV no disponible. Ingrese manualmente.');
+      setRates(prev => ({ ...prev, bcv, lastUpdated: Date.now() }));
     } catch {
-      setError('Error de conexión. Ingrese las tasas manualmente.');
+      setError('Error de conexión.');
     } finally {
       setLoading(false);
     }
