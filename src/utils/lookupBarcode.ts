@@ -1,4 +1,21 @@
+let veDb: Record<string, string> | null = null;
+async function getVeDb(): Promise<Record<string, string>> {
+  if (!veDb) {
+    try {
+      const res = await fetch('/products-ve.json');
+      veDb = res.ok ? await res.json() : {};
+    } catch {
+      veDb = {};
+    }
+  }
+  return veDb!;
+}
+
 export async function lookupBarcode(barcode: string): Promise<string> {
+  // 0. Base de datos venezolana local (prioridad máxima)
+  const db = await getVeDb();
+  if (db[barcode]) return db[barcode];
+
   // 1. Open Food Facts — español primero, mejor cobertura de productos latinoamericanos
   try {
     const res = await fetch(`https://world.openfoodfacts.org/api/v0/product/${barcode}.json`);
