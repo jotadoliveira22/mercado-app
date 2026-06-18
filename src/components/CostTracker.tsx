@@ -3,6 +3,7 @@ import { Plus, Trash2, Edit2, Check, X, RefreshCw, Camera, DollarSign, AlertCirc
 import type { TrackerItem, ExchangeRates, Unit } from '../types';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import { useExchangeRates } from '../hooks/useExchangeRates';
+import { lookupBarcode } from '../utils/lookupBarcode';
 import BarcodeScanner from './BarcodeScanner';
 
 export default function CostTracker() {
@@ -24,16 +25,9 @@ export default function CostTracker() {
   const handleScan = useCallback(async (barcode: string) => {
     setShowScanner(false);
     setLoadingProduct(true);
-    try {
-      const res = await fetch(`https://world.openfoodfacts.org/api/v0/product/${barcode}.json`);
-      const data = await res.json();
-      const productName = data?.product?.product_name_es || data?.product?.product_name || '';
-      setForm(prev => ({ ...prev, name: productName || barcode }));
-    } catch {
-      setForm(prev => ({ ...prev, name: barcode }));
-    } finally {
-      setLoadingProduct(false);
-    }
+    const name = await lookupBarcode(barcode);
+    setForm(prev => ({ ...prev, name: name || barcode }));
+    setLoadingProduct(false);
   }, []);
 
   const addItem = () => {

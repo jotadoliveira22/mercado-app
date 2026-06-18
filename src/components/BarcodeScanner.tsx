@@ -1,79 +1,71 @@
-import { useEffect, useRef, useState } from 'react';
-import Quagga from '@ericblade/quagga2';
-import { X, Loader2 } from 'lucide-react';
+import { useRef, useState } from 'react';
+import { BrowserMultiFormatReader } from '@zxing/browser';
+import { BarcodeFormat, DecodeHintType } from '@zxing/library';
+import { X, Camera, Loader2, ImagePlus } from 'lucide-react';
 
 interface BarcodeScannerProps {
   onScan: (barcode: string) => void;
   onClose: () => void;
 }
 
+// Native BarcodeDetector type
+interface NativeDetector {
+  detect(src: ImageBitmapSource): Promise<Array<{ rawValue: string }>>;
+}
+declare const BarcodeDetector: {
+  new(opts?: { formats?: string[] }): NativeDetector;
+};
+
+async function decodeImage(file: File): Promise<string | null> {
+  // 1. Try native BarcodeDetector (Chrome Android 83+)
+  if (typeof BarcodeDetector !== 'undefined') {
+    try {
+      const detector = new BarcodeDetector({
+        formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39', 'qr_code'],
+      });
+      const bitmap = await createImageBitmap(file);
+      const results = await detector.detect(bitmap);
+      if (results.length > 0) return results[0].rawValue;
+    } catch { /* fallback */ }
+  }
+
+  // 2. @zxing fallback
+  try {
+    const hints = new Map();
+    hints.set(DecodeHintType.POSSIBLE_FORMATS, [
+      BarcodeFormat.EAN_13, BarcodeFormat.EAN_8,
+      BarcodeFormat.UPC_A, BarcodeFormat.UPC_E,
+      BarcodeFormat.CODE_128, BarcodeFormat.CODE_39,
+    ]);
+    hints.set(DecodeHintType.TRY_HARDER, true);
+    const reader = new BrowserMultiFormatReader(hints);
+    const url = URL.createObjectURL(file);
+    try {
+      const result = await reader.decodeFromImageUrl(url);
+      return result.getText();
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+  } catch { /* not found */ }
+
+  return null;
+}
+
 export default function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const doneRef = useRef(false);
-  const [status, setStatus] = useState<'starting' | 'scanning' | 'error'>('starting');
-  const [errorMsg, setErrorMsg] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [status, setStatus] = useState<'idle' | 'decoding' | 'notfound'>('idle');
 
-  useEffect(() => {
-    let started = false;
-
-    Quagga.init(
-      {
-        inputStream: {
-          type: 'LiveStream',
-          target: containerRef.current!,
-          constraints: {
-            width: { min: 640 },
-            height: { min: 480 },
-            facingMode: 'environment',
-            aspectRatio: { min: 1, max: 2 },
-          },
-        },
-        locator: { patchSize: 'medium', halfSample: true },
-        numOfWorkers: navigator.hardwareConcurrency > 2 ? 2 : 1,
-        frequency: 10,
-        decoder: {
-          readers: [
-            'ean_reader',
-            'ean_8_reader',
-            'upc_reader',
-            'upc_e_reader',
-            'code_128_reader',
-            'code_39_reader',
-          ],
-        },
-        locate: true,
-      },
-      (err) => {
-        if (err) {
-          setStatus('error');
-          setErrorMsg(err instanceof Error ? err.message : String(err));
-          return;
-        }
-        started = true;
-        Quagga.start();
-        setStatus('scanning');
-      }
-    );
-
-    Quagga.onDetected((result) => {
-      const code = result?.codeResult?.code;
-      if (!code || doneRef.current) return;
-      // Require confidence — only accept if decodedCodes have low error
-      const errors = result.codeResult.decodedCodes
-        .filter(c => c.error !== undefined)
-        .map(c => c.error as number);
-      const avgErr = errors.length ? errors.reduce((a, b) => a + b, 0) / errors.length : 1;
-      if (avgErr > 0.25) return;
-      doneRef.current = true;
-      Quagga.stop();
+  const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setStatus('decoding');
+    const code = await decodeImage(file);
+    if (code) {
       onScan(code);
-    });
-
-    return () => {
-      if (started) Quagga.stop();
-      Quagga.offDetected();
-    };
-  }, [onScan]);
+    } else {
+      setStatus('notfound');
+    }
+  };
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-80 z-50 flex items-center justify-center p-4">
@@ -84,34 +76,73 @@ export default function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps)
             <X size={24} />
           </button>
         </div>
-        <div className="p-4">
-          {status === 'starting' && (
-            <div className="flex flex-col items-center gap-3 py-8">
-              <Loader2 size={32} className="animate-spin text-green-600" />
-              <p className="text-sm text-gray-500">Iniciando cámara...</p>
-            </div>
-          )}
-          {status === 'error' && (
-            <div className="flex flex-col items-center gap-3 py-8 text-center">
-              <p className="text-sm text-red-500 font-medium">Error al iniciar cámara</p>
-              <p className="text-xs text-gray-400">{errorMsg}</p>
-              <button onClick={onClose} className="mt-2 bg-green-700 text-white rounded-xl px-4 py-2 text-sm">
-                Cerrar
+
+        <div className="p-6 flex flex-col items-center gap-4">
+          {status === 'idle' && (
+            <>
+              <div className="w-20 h-20 bg-green-50 rounded-full flex items-center justify-center">
+                <Camera size={40} className="text-green-600" />
+              </div>
+              <p className="text-sm text-gray-600 text-center">
+                Toma una foto del código de barras con la cámara de tu teléfono
+              </p>
+              <button
+                onClick={() => inputRef.current?.click()}
+                className="w-full bg-green-700 text-white rounded-xl py-3 font-semibold text-sm flex items-center justify-center gap-2 hover:bg-green-600 active:bg-green-800 transition-colors"
+              >
+                <Camera size={18} />
+                Abrir cámara
               </button>
-            </div>
+              <button
+                onClick={() => {
+                  if (inputRef.current) {
+                    inputRef.current.removeAttribute('capture');
+                    inputRef.current.click();
+                  }
+                }}
+                className="w-full border border-gray-300 text-gray-600 rounded-xl py-2.5 text-sm flex items-center justify-center gap-2 hover:bg-gray-50 transition-colors"
+              >
+                <ImagePlus size={16} />
+                Elegir imagen de galería
+              </button>
+            </>
           )}
-          {/* Quagga renders video+canvas here */}
-          <div
-            ref={containerRef}
-            className={`w-full rounded-xl overflow-hidden relative ${status !== 'scanning' ? 'hidden' : ''}`}
-            style={{ height: '260px' }}
-          />
-          {status === 'scanning' && (
-            <p className="text-center text-sm text-gray-500 mt-3">
-              Centra el código de barras en la cámara
-            </p>
+
+          {status === 'decoding' && (
+            <>
+              <Loader2 size={40} className="animate-spin text-green-600" />
+              <p className="text-sm text-gray-500">Leyendo código de barras...</p>
+            </>
+          )}
+
+          {status === 'notfound' && (
+            <>
+              <div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center">
+                <X size={32} className="text-red-400" />
+              </div>
+              <p className="text-sm text-gray-700 font-medium text-center">No se detectó ningún código</p>
+              <p className="text-xs text-gray-400 text-center">
+                Intenta con mejor iluminación, enfoca bien el código y que ocupe la mayor parte de la foto
+              </p>
+              <button
+                onClick={() => { setStatus('idle'); if (inputRef.current) inputRef.current.value = ''; }}
+                className="w-full bg-green-700 text-white rounded-xl py-3 font-semibold text-sm hover:bg-green-600 transition-colors"
+              >
+                Intentar de nuevo
+              </button>
+            </>
           )}
         </div>
+
+        {/* Hidden file input — capture="environment" opens rear camera directly */}
+        <input
+          ref={inputRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          className="hidden"
+          onChange={handleFile}
+        />
       </div>
     </div>
   );

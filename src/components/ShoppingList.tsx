@@ -3,6 +3,7 @@ import { Plus, Trash2, ChevronDown, ChevronRight, ShoppingCart, ScanLine } from 
 import type { ShoppingItem, Category, Unit } from '../types';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import { categorizeProduct } from '../utils/categorize';
+import { lookupBarcode } from '../utils/lookupBarcode';
 import BarcodeScanner from './BarcodeScanner';
 
 const ALL_CATEGORIES: Category[] = [
@@ -64,16 +65,9 @@ export default function ShoppingList() {
   const handleScan = useCallback(async (barcode: string) => {
     setShowScanner(false);
     setLoadingProduct(true);
-    try {
-      const res = await fetch(`https://world.openfoodfacts.org/api/v0/product/${barcode}.json`);
-      const data = await res.json();
-      const name = data?.product?.product_name_es || data?.product?.product_name || '';
-      setInput(name || barcode);
-    } catch {
-      setInput(barcode);
-    } finally {
-      setLoadingProduct(false);
-    }
+    const name = await lookupBarcode(barcode);
+    setInput(name || barcode);
+    setLoadingProduct(false);
   }, []);
 
   const toggleItem = (id: string) => {
