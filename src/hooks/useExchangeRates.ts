@@ -1,98 +1,98 @@
 import { useState, useCallback, useEffect } from 'react';
 import type { ExchangeRates } from '../types';
 
-// Binance P2P: mismo endpoint que usa el script de Google Sheets
-const BINANCE_P2P_URL = 'https://p2p.binance.com/bapi/c2c/v2/friendly/c2c/adv/search';
-
-// BCV via proxy CORS público (bcv.org.ve bloquea CORS directo desde browser)
-const BCV_PROXY_URLS = [
-  'https://ve.dolarapi.com/v1/dolares/oficial',
-  'https://pydolarve.org/api/v1/dollar?monitor=bcv',
-];
-
-const BINANCE_PROXY_URLS = [
-  'https://ve.dolarapi.com/v1/dolares/binance',
-  'https://pydolarve.org/api/v1/dollar?monitor=binance',
-];
-
-async function fetchBCV(): Promise<number | null> {
-  // Intento 1: dolarapi
-  try {
-    const res = await fetch(BCV_PROXY_URLS[0]);
-    if (res.ok) {
-      const data = await res.json();
-      const val = data.promedio ?? data.precio ?? null;
-      if (val && val > 0) return Number(val);
-    }
-  } catch { /* continúa */ }
-
-  // Intento 2: pydolarve
-  try {
-    const res = await fetch(BCV_PROXY_URLS[1]);
-    if (res.ok) {
-      const data = await res.json();
-      const val = data.price ?? data.promedio ?? null;
-      if (val && val > 0) return Number(val);
-    }
-  } catch { /* continúa */ }
-
-  // Intento 3: Binance P2P directo para obtener el precio de mercado
+// Extrae un número positivo de cualquier campo conocido de una respuesta JSON
+function extractRate(data: Record<string, unknown>): number | null {
+  const candidates = [
+    data.promedio, data.precio, data.price, data.ask, data.bid,
+    data.rate, data.value, data.last, data.amount,
+  ];
+  for (const v of candidates) {
+    const n = Number(v);
+    if (!isNaN(n) && n > 1) return n; // tasas VES/USD siempre > 1
+  }
   return null;
 }
 
-async function fetchBinanceP2P(): Promise<number | null> {
-  // Intento 1: dolarapi
+async function tryFetch(url: string, options?: RequestInit): Promise<number | null> {
   try {
-    const res = await fetch(BINANCE_PROXY_URLS[0]);
-    if (res.ok) {
-      const data = await res.json();
-      const val = data.promedio ?? data.precio ?? null;
-      if (val && val > 0) return Number(val);
-    }
-  } catch { /* continúa */ }
+    const res = await fetch(url, options);
+    if (!res.ok) return null;
+    const data = await res.json();
+    return extractRate(data as Record<string, unknown>);
+  } catch {
+    return null;
+  }
+}
 
-  // Intento 2: pydolarve
-  try {
-    const res = await fetch(BINANCE_PROXY_URLS[1]);
-    if (res.ok) {
-      const data = await res.json();
-      const val = data.price ?? data.promedio ?? null;
-      if (val && val > 0) return Number(val);
-    }
-  } catch { /* continúa */ }
+async function fetchBCV(): Promise<number | null> {
+  const sources = [
+    () => tryFetch('https://ve.dolarapi.com/v1/dolares/oficial'),
+    () => tryFetch('https://pydolarve.org/api/v1/dollar?monitor=bcv'),
+    () => tryFetch('https://api.exchangemonitor.net/v1/country/ve?coins=USD&monitors=bcv').then(async (v) => {
+      if (v !== null) return v;
+      // exchangemonitor returns nested structure
+      try {
+        const res = await fetch('https://api.exchangemonitor.net/v1/country/ve?coins=USD&monitors=bcv');
+        if (!res.ok) return null;
+        const data = await res.json();
+        const monitor = data?.USD?.bcv ?? data?.bcv ?? null;
+        if (monitor) return extractRate(monitor as Record<string, unknown>);
+      } catch { /* noop */ }
+      return null;
+    }),
+  ];
 
-  // Intento 3: Binance P2P directo (mismo que el Google Apps Script)
-  try {
-    const res = await fetch(BINANCE_P2P_URL, {
+  for (const source of sources) {
+    const val = await source();
+    if (val !== null) return val;
+  }
+  return null;
+}
+
+async function fetchBinance(): Promise<number | null> {
+  const sources = [
+    () => tryFetch('https://ve.dolarapi.com/v1/dolares/binance'),
+    () => tryFetch('https://pydolarve.org/api/v1/dollar?monitor=binance'),
+    () => tryFetch('https://pydolarve.org/api/v1/dollar?monitor=enparalelovzla'),
+    // Binance P2P directo — puede fallar por CORS pero vale el intento
+    () => tryFetch('https://p2p.binance.com/bapi/c2c/v2/friendly/c2c/adv/search', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        fiat: 'VES',
-        page: 1,
-        rows: 10,
-        tradeType: 'BUY',
-        asset: 'USDT',
-        countries: [],
-        proMerchantAds: false,
-        shieldMerchantAds: false,
-        filterType: 'all',
-        periods: [],
-        additionalKycVerifyFilter: 0,
-        publisherType: null,
-        payTypes: [],
-        classifies: ['mass', 'profession'],
+        fiat: 'VES', page: 1, rows: 5, tradeType: 'BUY', asset: 'USDT',
+        countries: [], proMerchantAds: false, shieldMerchantAds: false,
+        filterType: 'all', periods: [], additionalKycVerifyFilter: 0,
+        publisherType: null, payTypes: [], classifies: ['mass', 'profession'],
       }),
-    });
-    if (res.ok) {
-      const data = await res.json();
-      const ads = data?.data ?? [];
-      for (const ad of ads) {
-        const price = parseFloat(ad?.adv?.price);
-        if (!isNaN(price) && price > 0) return price;
-      }
-    }
-  } catch { /* continúa */ }
+    }).then(async () => {
+      // tryFetch no funciona aquí porque la estructura es anidada
+      try {
+        const res = await fetch('https://p2p.binance.com/bapi/c2c/v2/friendly/c2c/adv/search', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            fiat: 'VES', page: 1, rows: 5, tradeType: 'BUY', asset: 'USDT',
+            countries: [], proMerchantAds: false, shieldMerchantAds: false,
+            filterType: 'all', periods: [], additionalKycVerifyFilter: 0,
+            publisherType: null, payTypes: [], classifies: ['mass', 'profession'],
+          }),
+        });
+        if (!res.ok) return null;
+        const data = await res.json();
+        for (const ad of (data?.data ?? [])) {
+          const p = parseFloat(ad?.adv?.price);
+          if (!isNaN(p) && p > 1) return p;
+        }
+      } catch { /* noop */ }
+      return null;
+    }),
+  ];
 
+  for (const source of sources) {
+    const val = await source();
+    if (val !== null) return val;
+  }
   return null;
 }
 
@@ -109,14 +109,14 @@ export function useExchangeRates() {
     setLoading(true);
     setError(null);
     try {
-      const [bcv, binance] = await Promise.all([fetchBCV(), fetchBinanceP2P()]);
+      const [bcv, binance] = await Promise.all([fetchBCV(), fetchBinance()]);
 
       if (bcv === null && binance === null) {
         setError('No se pudieron obtener las tasas. Ingrese manualmente.');
-      } else if (bcv === null) {
-        setError('Tasa BCV no disponible. Ingrese manualmente.');
       } else if (binance === null) {
         setError('Tasa Binance no disponible. Ingrese manualmente.');
+      } else if (bcv === null) {
+        setError('Tasa BCV no disponible. Ingrese manualmente.');
       }
 
       setRates({ bcv, binance, lastUpdated: Date.now() });

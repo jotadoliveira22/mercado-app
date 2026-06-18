@@ -1,6 +1,6 @@
-import { useEffect, useRef } from 'react';
-import { Html5Qrcode } from 'html5-qrcode';
-import { X } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { BrowserMultiFormatReader, BrowserCodeReader } from '@zxing/browser';
+import { X, Loader2 } from 'lucide-react';
 
 interface BarcodeScannerProps {
   onScan: (barcode: string) => void;
@@ -8,38 +8,48 @@ interface BarcodeScannerProps {
 }
 
 export default function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps) {
-  const scannerRef = useRef<Html5Qrcode | null>(null);
-  const scannedRef = useRef(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const controlsRef = useRef<{ stop: () => void } | null>(null);
+  const [status, setStatus] = useState<'starting' | 'scanning' | 'error'>('starting');
+  const [errorMsg, setErrorMsg] = useState('');
+  const doneRef = useRef(false);
 
   useEffect(() => {
-    const scanner = new Html5Qrcode('reader');
-    scannerRef.current = scanner;
+    const reader = new BrowserMultiFormatReader();
 
-    scanner.start(
-      { facingMode: 'environment' },
-      { fps: 10, qrbox: { width: 250, height: 150 } },
-      (decodedText) => {
-        if (scannedRef.current) return;
-        scannedRef.current = true;
-        scanner.stop().catch(() => {}).finally(() => onScan(decodedText));
-      },
-      () => {},
-    ).catch(() => {
-      // Fallback: try any camera if rear not available
-      scanner.start(
-        { facingMode: 'user' },
-        { fps: 10, qrbox: { width: 250, height: 150 } },
-        (decodedText) => {
-          if (scannedRef.current) return;
-          scannedRef.current = true;
-          scanner.stop().catch(() => {}).finally(() => onScan(decodedText));
-        },
-        () => {},
-      ).catch(() => {});
-    });
+    const start = async () => {
+      try {
+        const devices = await BrowserCodeReader.listVideoInputDevices();
+        const rear = devices.find(d =>
+          /back|rear|environment/i.test(d.label)
+        );
+        const deviceId = rear?.deviceId ?? devices[devices.length - 1]?.deviceId ?? undefined;
+
+        setStatus('scanning');
+
+        const controls = await reader.decodeFromVideoDevice(
+          deviceId,
+          videoRef.current!,
+          (result, err, ctrl) => {
+            if (result && !doneRef.current) {
+              doneRef.current = true;
+              ctrl.stop();
+              onScan(result.getText());
+            }
+            void err; // decode errors are expected while scanning
+          }
+        );
+        controlsRef.current = controls;
+      } catch (e) {
+        setStatus('error');
+        setErrorMsg(e instanceof Error ? e.message : 'No se pudo acceder a la cámara');
+      }
+    };
+
+    start();
 
     return () => {
-      scanner.stop().catch(() => {});
+      controlsRef.current?.stop();
     };
   }, [onScan]);
 
@@ -53,10 +63,31 @@ export default function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps)
           </button>
         </div>
         <div className="p-4">
-          <div id="reader" className="w-full rounded-xl overflow-hidden" />
-          <p className="text-center text-sm text-gray-500 mt-3">
-            Apunta la cámara al código de barras del producto
-          </p>
+          {status === 'starting' && (
+            <div className="flex flex-col items-center gap-3 py-8">
+              <Loader2 size={32} className="animate-spin text-green-600" />
+              <p className="text-sm text-gray-500">Iniciando cámara...</p>
+            </div>
+          )}
+          {status === 'error' && (
+            <div className="flex flex-col items-center gap-3 py-8 text-center">
+              <p className="text-sm text-red-500 font-medium">Error de cámara</p>
+              <p className="text-xs text-gray-400">{errorMsg}</p>
+              <button onClick={onClose} className="mt-2 bg-green-700 text-white rounded-xl px-4 py-2 text-sm">
+                Cerrar
+              </button>
+            </div>
+          )}
+          <video
+            ref={videoRef}
+            className={`w-full rounded-xl ${status !== 'scanning' ? 'hidden' : ''}`}
+            style={{ maxHeight: '300px', objectFit: 'cover' }}
+          />
+          {status === 'scanning' && (
+            <p className="text-center text-sm text-gray-500 mt-3">
+              Apunta la cámara al código de barras del producto
+            </p>
+          )}
         </div>
       </div>
     </div>
