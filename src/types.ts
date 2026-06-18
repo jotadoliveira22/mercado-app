@@ -1,33 +1,37 @@
-export type Categoria =
+export type Category =
   | 'Lácteos'
-  | 'Carnes y Embutidos'
+  | 'Carnes'
   | 'Frutas y Verduras'
-  | 'Panadería y Cereales'
+  | 'Panadería'
   | 'Bebidas'
   | 'Limpieza'
   | 'Higiene Personal'
-  | 'Enlatados y Conservas'
+  | 'Enlatados'
   | 'Congelados'
-  | 'Otros'
+  | 'Otros';
 
-export interface ItemLista {
-  id: string
-  nombre: string
-  categoria: Categoria
-  comprado: boolean
-  cantidad: number
+export type Unit = 'Und' | 'Kg';
+
+export interface ShoppingItem {
+  id: string;
+  name: string;
+  category: Category;
+  checked: boolean;
+  createdAt: number;
+  quantity: number;
+  unit: Unit;
 }
 
-export interface ItemCosto {
-  id: string
-  nombre: string
-  cantidad: number
-  precioUnitario: number
-  codigoBarras?: string
+export interface TrackerItem {
+  id: string;
+  name: string;
+  quantity: number;
+  unitPrice: number;
+  barcode?: string;
 }
 
-export interface TasaCambio {
-  bcv: number | null
-  binance: number | null
-  ultimaActualizacion: string | null
+export interface ExchangeRates {
+  bcv: number | null;
+  binance: number | null;
+  lastUpdated: number | null;
 }

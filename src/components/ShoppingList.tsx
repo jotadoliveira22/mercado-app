@@ -1,224 +1,236 @@
-import { useState } from 'react'
-import { Plus, Trash2, ChevronDown, ChevronRight, ShoppingCart } from 'lucide-react'
-import { useLocalStorage } from '../hooks/useLocalStorage'
-import { categorizarProducto } from '../utils/categorizar'
-import type { ItemLista, Categoria } from '../types'
+import { useState, useMemo } from 'react';
+import { Plus, Trash2, ChevronDown, ChevronRight, ShoppingCart } from 'lucide-react';
+import type { ShoppingItem, Category, Unit } from '../types';
+import { useLocalStorage } from '../hooks/useLocalStorage';
+import { categorizeProduct } from '../utils/categorize';
 
-const CATEGORIAS_ORDEN: Categoria[] = [
-  'Frutas y Verduras',
-  'Carnes y Embutidos',
-  'Lácteos',
-  'Panadería y Cereales',
-  'Bebidas',
-  'Enlatados y Conservas',
-  'Congelados',
-  'Limpieza',
-  'Higiene Personal',
-  'Otros',
-]
+const ALL_CATEGORIES: Category[] = [
+  'Lácteos', 'Carnes', 'Frutas y Verduras', 'Panadería', 'Bebidas',
+  'Limpieza', 'Higiene Personal', 'Enlatados', 'Congelados', 'Otros'
+];
 
-const CATEGORIA_EMOJI: Record<Categoria, string> = {
+const CATEGORY_ICONS: Record<Category, string> = {
   'Lácteos': '🥛',
-  'Carnes y Embutidos': '🥩',
+  'Carnes': '🥩',
   'Frutas y Verduras': '🥦',
-  'Panadería y Cereales': '🍞',
+  'Panadería': '🍞',
   'Bebidas': '🥤',
   'Limpieza': '🧹',
   'Higiene Personal': '🧴',
-  'Enlatados y Conservas': '🥫',
+  'Enlatados': '🥫',
   'Congelados': '🧊',
   'Otros': '🛒',
-}
+};
 
 export default function ShoppingList() {
-  const [items, setItems] = useLocalStorage<ItemLista[]>('lista-compras', [])
-  const [input, setInput] = useState('')
-  const [cantidad, setCantidad] = useState(1)
-  const [categoriasAbiertas, setCategoriasAbiertas] = useState<Set<Categoria>>(
-    new Set(CATEGORIAS_ORDEN),
-  )
+  const [items, setItems] = useLocalStorage<ShoppingItem[]>('shopping-items', []);
+  const [input, setInput] = useState('');
+  const [quantity, setQuantity] = useState('1');
+  const [unit, setUnit] = useState<Unit>('Und');
+  const [collapsedCategories, setCollapsedCategories] = useState<Set<Category>>(new Set());
 
-  const agregar = () => {
-    const nombre = input.trim()
-    if (!nombre) return
-    const nuevo: ItemLista = {
-      id: crypto.randomUUID(),
-      nombre,
-      categoria: categorizarProducto(nombre),
-      comprado: false,
-      cantidad,
+  const groupedItems = useMemo(() => {
+    const groups: Partial<Record<Category, ShoppingItem[]>> = {};
+    for (const item of items) {
+      if (!groups[item.category]) groups[item.category] = [];
+      groups[item.category]!.push(item);
     }
-    setItems((prev) => [...prev, nuevo])
-    setInput('')
-    setCantidad(1)
-  }
+    return groups;
+  }, [items]);
 
-  const toggleComprado = (id: string) => {
-    setItems((prev) =>
-      prev.map((i) => (i.id === id ? { ...i, comprado: !i.comprado } : i)),
-    )
-  }
+  const checkedCount = items.filter(i => i.checked).length;
+  const totalCount = items.length;
 
-  const eliminar = (id: string) => {
-    setItems((prev) => prev.filter((i) => i.id !== id))
-  }
+  const addItem = () => {
+    const name = input.trim();
+    if (!name) return;
+    const newItem: ShoppingItem = {
+      id: crypto.randomUUID(),
+      name,
+      category: categorizeProduct(name),
+      checked: false,
+      createdAt: Date.now(),
+      quantity: parseFloat(quantity) || 1,
+      unit,
+    };
+    setItems(prev => [...prev, newItem]);
+    setInput('');
+    setQuantity('1');
+  };
 
-  const limpiarComprados = () => {
-    setItems((prev) => prev.filter((i) => !i.comprado))
-  }
+  const toggleItem = (id: string) => {
+    setItems(prev => prev.map(i => i.id === id ? { ...i, checked: !i.checked } : i));
+  };
 
-  const toggleCategoria = (cat: Categoria) => {
-    setCategoriasAbiertas((prev) => {
-      const next = new Set(prev)
-      next.has(cat) ? next.delete(cat) : next.add(cat)
-      return next
-    })
-  }
+  const deleteItem = (id: string) => {
+    setItems(prev => prev.filter(i => i.id !== id));
+  };
 
-  const agrupados = CATEGORIAS_ORDEN.reduce<Record<Categoria, ItemLista[]>>(
-    (acc, cat) => {
-      acc[cat] = items.filter((i) => i.categoria === cat)
-      return acc
-    },
-    {} as Record<Categoria, ItemLista[]>,
-  )
+  const toggleCategory = (cat: Category) => {
+    setCollapsedCategories(prev => {
+      const next = new Set(prev);
+      if (next.has(cat)) next.delete(cat);
+      else next.add(cat);
+      return next;
+    });
+  };
 
-  const totalItems = items.length
-  const comprados = items.filter((i) => i.comprado).length
+  const clearChecked = () => {
+    setItems(prev => prev.filter(i => !i.checked));
+  };
 
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="bg-green-700 text-white px-4 py-4">
-        <div className="flex items-center gap-2 mb-1">
-          <ShoppingCart size={22} />
-          <h1 className="text-lg font-bold">Lista de Compras</h1>
+      <div className="bg-green-700 px-4 py-4 shadow-md">
+        <div className="flex items-center gap-2 mb-3">
+          <ShoppingCart className="text-white" size={22} />
+          <h1 className="text-white font-bold text-xl">Lista de Compras</h1>
         </div>
-        {totalItems > 0 && (
-          <p className="text-green-200 text-sm">
-            {comprados} de {totalItems} productos comprados
-          </p>
-        )}
-        {totalItems > 0 && (
-          <div className="w-full bg-green-900 rounded-full h-1.5 mt-2">
-            <div
-              className="bg-white h-1.5 rounded-full transition-all"
-              style={{ width: `${(comprados / totalItems) * 100}%` }}
-            />
-          </div>
-        )}
-      </div>
-
-      {/* Input */}
-      <div className="bg-white border-b border-gray-200 px-4 py-3 flex gap-2">
-        <input
-          className="flex-1 border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-green-500"
-          placeholder="Agregar producto..."
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && agregar()}
-        />
-        <input
-          type="number"
-          min={1}
-          className="w-14 border border-gray-300 rounded-xl px-2 py-2 text-sm text-center focus:outline-none focus:border-green-500"
-          value={cantidad}
-          onChange={(e) => setCantidad(Math.max(1, Number(e.target.value)))}
-        />
-        <button
-          onClick={agregar}
-          className="bg-green-600 hover:bg-green-700 text-white rounded-xl px-3 py-2 flex items-center gap-1 text-sm font-medium"
-        >
-          <Plus size={18} />
-        </button>
-      </div>
-
-      {/* Lista */}
-      <div className="flex-1 overflow-y-auto pb-4">
-        {totalItems === 0 && (
-          <div className="flex flex-col items-center justify-center py-20 text-gray-400">
-            <ShoppingCart size={56} className="mb-3 opacity-30" />
-            <p className="text-sm">Tu lista está vacía</p>
-            <p className="text-xs mt-1">Agrega productos arriba</p>
-          </div>
-        )}
-
-        {CATEGORIAS_ORDEN.map((cat) => {
-          const catItems = agrupados[cat]
-          if (catItems.length === 0) return null
-          const abierta = categoriasAbiertas.has(cat)
-          const catComprados = catItems.filter((i) => i.comprado).length
-
-          return (
-            <div key={cat} className="mt-2 mx-3">
-              <button
-                className="w-full flex items-center justify-between px-3 py-2 bg-gray-100 rounded-xl"
-                onClick={() => toggleCategoria(cat)}
-              >
-                <span className="flex items-center gap-2 text-sm font-semibold text-gray-700">
-                  <span>{CATEGORIA_EMOJI[cat]}</span>
-                  {cat}
-                  <span className="text-xs font-normal text-gray-400">
-                    ({catComprados}/{catItems.length})
-                  </span>
-                </span>
-                {abierta ? <ChevronDown size={16} className="text-gray-400" /> : <ChevronRight size={16} className="text-gray-400" />}
-              </button>
-
-              {abierta && (
-                <div className="mt-1 space-y-1">
-                  {catItems.map((item) => (
-                    <div
-                      key={item.id}
-                      className={`flex items-center gap-3 px-3 py-3 bg-white rounded-xl border ${
-                        item.comprado ? 'border-green-100 opacity-60' : 'border-gray-100'
-                      }`}
-                    >
-                      <button
-                        onClick={() => toggleComprado(item.id)}
-                        className={`w-6 h-6 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-colors ${
-                          item.comprado
-                            ? 'bg-green-500 border-green-500 text-white'
-                            : 'border-gray-300'
-                        }`}
-                      >
-                        {item.comprado && (
-                          <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-                            <path d="M2 6l3 3 5-5" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                          </svg>
-                        )}
-                      </button>
-                      <span className={`flex-1 text-sm ${item.comprado ? 'line-through text-gray-400' : 'text-gray-800'}`}>
-                        {item.nombre}
-                        {item.cantidad > 1 && (
-                          <span className="ml-2 text-xs text-gray-400">x{item.cantidad}</span>
-                        )}
-                      </span>
-                      <button
-                        onClick={() => eliminar(item.id)}
-                        className="text-gray-300 hover:text-red-400 p-1"
-                      >
-                        <Trash2 size={15} />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
+        {totalCount > 0 && (
+          <div className="flex items-center justify-between">
+            <div className="bg-green-600 rounded-full px-3 py-1">
+              <span className="text-white text-sm font-medium">
+                {checkedCount} de {totalCount} items comprados
+              </span>
             </div>
-          )
-        })}
+            <div className="w-32 bg-green-900 rounded-full h-2">
+              <div
+                className="bg-white rounded-full h-2 transition-all duration-500"
+                style={{ width: totalCount > 0 ? `${(checkedCount / totalCount) * 100}%` : '0%' }}
+              />
+            </div>
+          </div>
+        )}
+      </div>
 
-        {comprados > 0 && (
-          <div className="px-4 mt-4">
+      {/* Add item */}
+      <div className="px-4 py-3 bg-white border-b border-gray-100 shadow-sm space-y-2">
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={input}
+            onChange={e => setInput(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && addItem()}
+            placeholder="Agregar producto..."
+            className="flex-1 border border-gray-300 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+          />
+          <button
+            onClick={addItem}
+            className="bg-green-700 text-white rounded-xl px-4 py-2 hover:bg-green-600 active:bg-green-800 transition-colors"
+          >
+            <Plus size={20} />
+          </button>
+        </div>
+        <div className="flex gap-2">
+          <input
+            type="number"
+            min="0.1"
+            step="0.1"
+            value={quantity}
+            onChange={e => setQuantity(e.target.value)}
+            className="w-20 border border-gray-300 rounded-xl px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 text-center"
+          />
+          <div className="flex rounded-xl overflow-hidden border border-gray-300">
             <button
-              onClick={limpiarComprados}
-              className="w-full py-2 text-sm text-red-500 border border-red-200 rounded-xl hover:bg-red-50"
+              onClick={() => setUnit('Und')}
+              className={`px-4 py-1.5 text-sm font-medium transition-colors ${unit === 'Und' ? 'bg-green-700 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
             >
-              Eliminar {comprados} producto{comprados > 1 ? 's' : ''} comprado{comprados > 1 ? 's' : ''}
+              Und
+            </button>
+            <button
+              onClick={() => setUnit('Kg')}
+              className={`px-4 py-1.5 text-sm font-medium transition-colors ${unit === 'Kg' ? 'bg-green-700 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+            >
+              Kg
             </button>
           </div>
+        </div>
+      </div>
+
+      {/* List */}
+      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
+        {items.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-full text-gray-400 gap-3 py-16">
+            <ShoppingCart size={48} strokeWidth={1} />
+            <p className="text-base">Tu lista está vacía</p>
+            <p className="text-sm">Agrega productos para comenzar</p>
+          </div>
+        ) : (
+          <>
+            {ALL_CATEGORIES.map(cat => {
+              const catItems = groupedItems[cat];
+              if (!catItems || catItems.length === 0) return null;
+              const isCollapsed = collapsedCategories.has(cat);
+              const checkedInCat = catItems.filter(i => i.checked).length;
+              return (
+                <div key={cat} className="bg-white rounded-2xl shadow-sm overflow-hidden border border-gray-100">
+                  <button
+                    onClick={() => toggleCategory(cat)}
+                    className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 hover:bg-gray-100 transition-colors"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg">{CATEGORY_ICONS[cat]}</span>
+                      <span className="font-semibold text-gray-700 text-sm">{cat}</span>
+                      <span className="bg-green-100 text-green-700 text-xs font-medium px-2 py-0.5 rounded-full">
+                        {checkedInCat}/{catItems.length}
+                      </span>
+                    </div>
+                    {isCollapsed ? <ChevronRight size={16} className="text-gray-400" /> : <ChevronDown size={16} className="text-gray-400" />}
+                  </button>
+                  {!isCollapsed && (
+                    <ul>
+                      {catItems.map((item, idx) => (
+                        <li
+                          key={item.id}
+                          className={`flex items-center gap-3 px-4 py-3 ${idx < catItems.length - 1 ? 'border-b border-gray-50' : ''}`}
+                        >
+                          <button
+                            onClick={() => toggleItem(item.id)}
+                            className={`w-6 h-6 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-colors ${
+                              item.checked
+                                ? 'bg-green-500 border-green-500'
+                                : 'border-gray-300'
+                            }`}
+                          >
+                            {item.checked && (
+                              <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                                <path d="M2 6l3 3 5-5" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                              </svg>
+                            )}
+                          </button>
+                          <span className={`flex-1 text-sm ${item.checked ? 'line-through text-gray-400' : 'text-gray-700'}`}>
+                            {item.name}
+                            {(item.quantity || item.unit) && (
+                              <span className="ml-2 text-xs font-medium text-green-700 bg-green-50 px-1.5 py-0.5 rounded-full">
+                                {item.quantity ?? 1} {item.unit ?? 'Und'}
+                              </span>
+                            )}
+                          </span>
+                          <button
+                            onClick={() => deleteItem(item.id)}
+                            className="text-gray-300 hover:text-red-400 transition-colors"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              );
+            })}
+            {checkedCount > 0 && (
+              <button
+                onClick={clearChecked}
+                className="w-full py-2 text-sm text-red-400 hover:text-red-600 font-medium"
+              >
+                Eliminar {checkedCount} item{checkedCount > 1 ? 's' : ''} comprado{checkedCount > 1 ? 's' : ''}
+              </button>
+            )}
+          </>
         )}
       </div>
     </div>
-  )
+  );
 }
