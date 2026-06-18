@@ -5,6 +5,7 @@ import { useLocalStorage } from '../hooks/useLocalStorage';
 import { categorizeProduct } from '../utils/categorize';
 import { lookupBarcode } from '../utils/lookupBarcode';
 import BarcodeScanner from './BarcodeScanner';
+import NewProductModal from './NewProductModal';
 
 const ALL_CATEGORIES: Category[] = [
   'Lácteos', 'Carnes', 'Frutas y Verduras', 'Panadería', 'Bebidas',
@@ -32,6 +33,7 @@ export default function ShoppingList() {
   const [collapsedCategories, setCollapsedCategories] = useState<Set<Category>>(new Set());
   const [showScanner, setShowScanner] = useState(false);
   const [loadingProduct, setLoadingProduct] = useState(false);
+  const [unknownBarcode, setUnknownBarcode] = useState<string | null>(null);
 
   const groupedItems = useMemo(() => {
     const groups: Partial<Record<Category, ShoppingItem[]>> = {};
@@ -66,8 +68,12 @@ export default function ShoppingList() {
     setShowScanner(false);
     setLoadingProduct(true);
     const name = await lookupBarcode(barcode);
-    setInput(name || barcode);
     setLoadingProduct(false);
+    if (name) {
+      setInput(name);
+    } else {
+      setUnknownBarcode(barcode);
+    }
   }, []);
 
   const toggleItem = (id: string) => {
@@ -95,6 +101,13 @@ export default function ShoppingList() {
     <div className="flex flex-col h-full">
       {showScanner && (
         <BarcodeScanner onScan={handleScan} onClose={() => setShowScanner(false)} />
+      )}
+      {unknownBarcode && (
+        <NewProductModal
+          barcode={unknownBarcode}
+          onConfirm={name => { setInput(name); setUnknownBarcode(null); }}
+          onCancel={() => { setInput(unknownBarcode); setUnknownBarcode(null); }}
+        />
       )}
 
       {/* Header */}

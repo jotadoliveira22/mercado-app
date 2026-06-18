@@ -5,6 +5,7 @@ import { useLocalStorage } from '../hooks/useLocalStorage';
 import { useExchangeRates } from '../hooks/useExchangeRates';
 import { lookupBarcode } from '../utils/lookupBarcode';
 import BarcodeScanner from './BarcodeScanner';
+import NewProductModal from './NewProductModal';
 
 type CasheaRate = 20 | 40;
 
@@ -33,6 +34,7 @@ export default function CostTracker() {
   const [items, setItems] = useLocalStorage<TrackerItem[]>('tracker-items', []);
   const { rates, setRates, loading, error, fetchRates } = useExchangeRates();
   const [showScanner, setShowScanner] = useState(false);
+  const [unknownBarcode, setUnknownBarcode] = useState<string | null>(null);
   const [manualBcv, setManualBcv] = useState('');
   const [manualBinance, setManualBinance] = useState('');
   const [casheaRate, setCasheaRate] = useState<CasheaRate>(20);
@@ -50,8 +52,12 @@ export default function CostTracker() {
     setShowScanner(false);
     setLoadingProduct(true);
     const name = await lookupBarcode(barcode);
-    setForm(prev => ({ ...prev, name: name || barcode }));
     setLoadingProduct(false);
+    if (name) {
+      setForm(prev => ({ ...prev, name }));
+    } else {
+      setUnknownBarcode(barcode);
+    }
   }, []);
 
   const addItem = () => {
@@ -335,6 +341,13 @@ export default function CostTracker() {
 
       {showScanner && (
         <BarcodeScanner onScan={handleScan} onClose={() => setShowScanner(false)} />
+      )}
+      {unknownBarcode && (
+        <NewProductModal
+          barcode={unknownBarcode}
+          onConfirm={name => { setForm(prev => ({ ...prev, name })); setUnknownBarcode(null); }}
+          onCancel={() => { setForm(prev => ({ ...prev, name: unknownBarcode })); setUnknownBarcode(null); }}
+        />
       )}
     </div>
   );

@@ -1,3 +1,19 @@
+const STORAGE_KEY = 'custom-products';
+
+function getCustomDb(): Record<string, string> {
+  try {
+    return JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}');
+  } catch {
+    return {};
+  }
+}
+
+export function saveCustomProduct(barcode: string, name: string) {
+  const db = getCustomDb();
+  db[barcode] = name.trim();
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
+}
+
 let veDb: Record<string, string> | null = null;
 async function getVeDb(): Promise<Record<string, string>> {
   if (!veDb) {
@@ -12,11 +28,15 @@ async function getVeDb(): Promise<Record<string, string>> {
 }
 
 export async function lookupBarcode(barcode: string): Promise<string> {
-  // 0. Base de datos venezolana local (prioridad máxima)
+  // 1. Custom products saved by the user (priority over everything)
+  const custom = getCustomDb();
+  if (custom[barcode]) return custom[barcode];
+
+  // 2. Venezuelan database
   const db = await getVeDb();
   if (db[barcode]) return db[barcode];
 
-  // 1. Open Food Facts — español primero, mejor cobertura de productos latinoamericanos
+  // 3. Open Food Facts
   try {
     const res = await fetch(`https://world.openfoodfacts.org/api/v0/product/${barcode}.json`);
     if (res.ok) {
@@ -26,7 +46,7 @@ export async function lookupBarcode(barcode: string): Promise<string> {
     }
   } catch { /* continúa */ }
 
-  // 2. UPC Item DB — cubre productos importados y multinacionales (100 req/día gratis)
+  // 4. UPC Item DB
   try {
     const res = await fetch(`https://api.upcitemdb.com/prod/trial/lookup?upc=${barcode}`);
     if (res.ok) {
@@ -36,6 +56,5 @@ export async function lookupBarcode(barcode: string): Promise<string> {
     }
   } catch { /* continúa */ }
 
-  // No encontrado — devuelve el código para que el usuario lo edite
   return '';
 }
