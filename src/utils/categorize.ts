@@ -11,13 +11,17 @@ function normalize(text: string): string {
     .trim();
 }
 
+// Para palabras simples exige límite de palabra; para frases usa substring
 function matches(norm: string, words: string[]): boolean {
   return words.some(w => {
     const nw = normalize(w);
-    // Coincidencia de palabra completa o subcadena si es frase
-    if (nw.includes(' ')) return norm.includes(nw);
-    const re = new RegExp(`(^|\\s)${nw}(\\s|$)`);
-    return re.test(norm) || norm.includes(nw);
+    if (nw.includes(' ')) {
+      // Frase: coincidencia de subcadena exacta
+      return norm.includes(nw);
+    }
+    // Palabra simple: debe estar rodeada de no-letras (evita "res" en "sobres")
+    const re = new RegExp(`(^|[^a-z])${nw}([^a-z]|$)`);
+    return re.test(norm);
   });
 }
 
