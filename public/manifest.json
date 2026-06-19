@@ -1,16 +1,23 @@
 {
-  "name": "MercadoApp",
-  "short_name": "MercadoApp",
-  "description": "Lista de compras y calculadora de mercado",
+  "name": "MarktPlan",
+  "short_name": "MarktPlan",
+  "description": "Tu asistente de mercado",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#15803d",
-  "theme_color": "#15803d",
+  "background_color": "#166534",
+  "theme_color": "#166534",
   "icons": [
     {
-      "src": "/vite.svg",
-      "sizes": "any",
-      "type": "image/svg+xml"
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
     }
   ]
 }
