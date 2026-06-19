@@ -8,24 +8,36 @@ import BarcodeScanner from './BarcodeScanner';
 import NewProductModal from './NewProductModal';
 
 const ALL_CATEGORIES: Category[] = [
-  'Lácteos', 'Carnes', 'Charcutería', 'Frutas y Verduras', 'Panadería',
-  'Cereales y Pastas', 'Bebidas', 'Condimentos', 'Enlatados y Granos',
-  'Congelados', 'Limpieza', 'Higiene Personal', 'Otros'
+  'Lácteos', 'Huevos', 'Carnes y Aves', 'Charcutería y Embutidos',
+  'Pescados y Mariscos', 'Frutas y Verduras', 'Panadería y Repostería',
+  'Cereales, Pastas y Harinas', 'Aceites y Untables', 'Salsas y Condimentos',
+  'Enlatados y Conservas', 'Snacks y Frutos Secos', 'Dulces y Galletas',
+  'Bebidas', 'Café e Infusiones', 'Congelados', 'Comidas Preparadas',
+  'Sopas y Caldos', 'Limpieza', 'Higiene Personal', 'Mascotas', 'Otros',
 ];
 
 const CATEGORY_ICONS: Record<Category, string> = {
   'Lácteos': '🥛',
-  'Carnes': '🥩',
-  'Charcutería': '🍖',
+  'Huevos': '🥚',
+  'Carnes y Aves': '🥩',
+  'Charcutería y Embutidos': '🍖',
+  'Pescados y Mariscos': '🐟',
   'Frutas y Verduras': '🥦',
-  'Panadería': '🍞',
-  'Cereales y Pastas': '🍝',
+  'Panadería y Repostería': '🍞',
+  'Cereales, Pastas y Harinas': '🍝',
+  'Aceites y Untables': '🫙',
+  'Salsas y Condimentos': '🧂',
+  'Enlatados y Conservas': '🥫',
+  'Snacks y Frutos Secos': '🥜',
+  'Dulces y Galletas': '🍫',
   'Bebidas': '🥤',
-  'Condimentos': '🧂',
-  'Enlatados y Granos': '🥫',
+  'Café e Infusiones': '☕',
   'Congelados': '🧊',
+  'Comidas Preparadas': '🍱',
+  'Sopas y Caldos': '🍲',
   'Limpieza': '🧹',
   'Higiene Personal': '🧴',
+  'Mascotas': '🐾',
   'Otros': '🛒',
 };
 
