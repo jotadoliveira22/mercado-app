@@ -1,18 +1,21 @@
 import { useState, useEffect, useCallback } from 'react';
-import { ShoppingCart, ShoppingBag, BarChart2, GitCompare, Cloud, CloudOff, Loader } from 'lucide-react';
+import { ShoppingCart, ShoppingBag, BarChart2, GitCompare, Cloud, CloudOff, Loader, LogOut } from 'lucide-react';
 import ShoppingList from './components/ShoppingList';
 import CostTracker from './components/CostTracker';
 import Reports from './components/Reports';
 import Comparativa from './components/Comparativa';
+import AuthScreen from './components/AuthScreen';
+import { supabase } from './lib/supabase';
 import {
   fetchShoppingItems, pushShoppingItems,
   fetchTrackerItems, pushTrackerItems,
   fetchSavedPurchases, pushSavedPurchases,
 } from './hooks/useSync';
 import type { ShoppingItem, TrackerItem, SavedPurchase } from './types';
+import type { User } from '@supabase/supabase-js';
 
 type Tab = 'list' | 'cart' | 'reports' | 'compare';
-type SyncState = 'loading' | 'ok' | 'error' | 'offline';
+type SyncState = 'loading' | 'ok' | 'error';
 
 const TABS = [
   { id: 'list',    icon: ShoppingCart, label: 'Lista' },
@@ -22,10 +25,10 @@ const TABS = [
 ] as const;
 
 export default function App() {
+  const [user, setUser] = useState<User | null | undefined>(undefined); // undefined = loading
   const [activeTab, setActiveTab] = useState<Tab>('list');
   const [syncState, setSyncState] = useState<SyncState>('loading');
 
-  // Shared state lifted here so sync can push on every change
   const [shoppingItems, setShoppingItemsRaw] = useState<ShoppingItem[]>(() => {
     try { return JSON.parse(localStorage.getItem('shopping-items') || '[]'); } catch { return []; }
   });
@@ -36,7 +39,51 @@ export default function App() {
     try { return JSON.parse(localStorage.getItem('saved-purchases') || '[]'); } catch { return []; }
   });
 
-  // Wrapped setters: update localStorage + push to Supabase
+  // Listen to auth state
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      setUser(data.session?.user ?? null);
+    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+    });
+    return () => subscription.unsubscribe();
+  }, []);
+
+  // Load from Supabase when user logs in
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    async function loadFromCloud() {
+      setSyncState('loading');
+      try {
+        const [shopping, tracker, purchases] = await Promise.all([
+          fetchShoppingItems(),
+          fetchTrackerItems(),
+          fetchSavedPurchases(),
+        ]);
+        if (cancelled) return;
+        if (shopping !== null) {
+          setShoppingItemsRaw(shopping);
+          localStorage.setItem('shopping-items', JSON.stringify(shopping));
+        }
+        if (tracker !== null) {
+          setTrackerItemsRaw(tracker);
+          localStorage.setItem('tracker-items', JSON.stringify(tracker));
+        }
+        if (purchases !== null) {
+          setSavedPurchasesRaw(purchases);
+          localStorage.setItem('saved-purchases', JSON.stringify(purchases));
+        }
+        setSyncState('ok');
+      } catch {
+        if (!cancelled) setSyncState('error');
+      }
+    }
+    loadFromCloud();
+    return () => { cancelled = true; };
+  }, [user]);
+
   const setShoppingItems = useCallback((val: ShoppingItem[] | ((prev: ShoppingItem[]) => ShoppingItem[])) => {
     setShoppingItemsRaw(prev => {
       const next = val instanceof Function ? val(prev) : val;
@@ -64,39 +111,29 @@ export default function App() {
     });
   }, []);
 
-  // On mount: load from Supabase (cloud takes priority over localStorage)
-  useEffect(() => {
-    let cancelled = false;
-    async function loadFromCloud() {
-      setSyncState('loading');
-      try {
-        const [shopping, tracker, purchases] = await Promise.all([
-          fetchShoppingItems(),
-          fetchTrackerItems(),
-          fetchSavedPurchases(),
-        ]);
-        if (cancelled) return;
+  const logout = async () => {
+    await supabase.auth.signOut();
+    localStorage.removeItem('shopping-items');
+    localStorage.removeItem('tracker-items');
+    localStorage.removeItem('saved-purchases');
+    setShoppingItemsRaw([]);
+    setTrackerItemsRaw([]);
+    setSavedPurchasesRaw([]);
+  };
 
-        if (shopping !== null) {
-          setShoppingItemsRaw(shopping);
-          localStorage.setItem('shopping-items', JSON.stringify(shopping));
-        }
-        if (tracker !== null) {
-          setTrackerItemsRaw(tracker);
-          localStorage.setItem('tracker-items', JSON.stringify(tracker));
-        }
-        if (purchases !== null) {
-          setSavedPurchasesRaw(purchases);
-          localStorage.setItem('saved-purchases', JSON.stringify(purchases));
-        }
-        setSyncState('ok');
-      } catch {
-        if (!cancelled) setSyncState('error');
-      }
-    }
-    loadFromCloud();
-    return () => { cancelled = true; };
-  }, []);
+  // Still checking auth
+  if (user === undefined) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-[#f0fdf4]">
+        <Loader size={32} className="animate-spin text-green-700" />
+      </div>
+    );
+  }
+
+  // Not logged in
+  if (user === null) {
+    return <AuthScreen />;
+  }
 
   const syncIcon = syncState === 'loading'
     ? <Loader size={13} className="animate-spin text-green-300" />
@@ -106,36 +143,31 @@ export default function App() {
 
   return (
     <div className="flex flex-col h-screen bg-[#f0fdf4] max-w-lg mx-auto relative">
-
-      {/* Top header global */}
+      {/* Top header */}
       <header className="bg-[#166534] flex-shrink-0 px-5 py-4 flex items-center gap-4 shadow-lg">
         <div className="bg-white rounded-2xl p-2 shadow-md flex-shrink-0">
-          <img
-            src="/logo.png"
-            alt="MarktPlan"
-            className="h-16 w-16 object-contain"
-          />
+          <img src="/logo.png" alt="MarktPlan" className="h-16 w-16 object-contain" />
         </div>
         <div className="flex-1">
           <h1 className="text-white font-extrabold text-2xl leading-tight tracking-tight">MarktPlan</h1>
-          <p className="text-green-300 text-xs font-medium leading-tight">Tu asistente de mercado</p>
+          <p className="text-green-300 text-xs font-medium leading-tight truncate max-w-[140px]">{user.email}</p>
         </div>
-        <div className="flex flex-col items-center gap-0.5">
-          {syncIcon}
-          <span className="text-[9px] text-green-400">
-            {syncState === 'loading' ? 'Sync...' : syncState === 'ok' ? 'Nube' : 'Error'}
-          </span>
+        <div className="flex flex-col items-center gap-1">
+          <div className="flex flex-col items-center gap-0.5">
+            {syncIcon}
+            <span className="text-[9px] text-green-400">
+              {syncState === 'loading' ? 'Sync...' : syncState === 'ok' ? 'Nube' : 'Error'}
+            </span>
+          </div>
+          <button onClick={logout} className="text-green-400 hover:text-white transition-colors mt-1" title="Cerrar sesión">
+            <LogOut size={16} />
+          </button>
         </div>
       </header>
 
-      {/* Contenido */}
+      {/* Content */}
       <div className="flex-1 overflow-hidden">
-        {activeTab === 'list' && (
-          <ShoppingList
-            items={shoppingItems}
-            setItems={setShoppingItems}
-          />
-        )}
+        {activeTab === 'list' && <ShoppingList items={shoppingItems} setItems={setShoppingItems} />}
         {activeTab === 'cart' && (
           <CostTracker
             trackerItems={trackerItems}
@@ -144,9 +176,7 @@ export default function App() {
             setSavedPurchases={setSavedPurchases}
           />
         )}
-        {activeTab === 'reports' && (
-          <Reports savedPurchases={savedPurchases} />
-        )}
+        {activeTab === 'reports' && <Reports savedPurchases={savedPurchases} />}
         {activeTab === 'compare' && <Comparativa />}
       </div>
 

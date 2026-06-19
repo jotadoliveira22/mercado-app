@@ -1,20 +1,20 @@
-import { useEffect, useRef, useCallback } from 'react';
-import { supabase, getDeviceId } from '../lib/supabase';
+import { supabase } from '../lib/supabase';
 import type { ShoppingItem, TrackerItem, SavedPurchase } from '../types';
 
-type SyncStatus = 'idle' | 'syncing' | 'error' | 'ok';
-
-export function useSyncStatus() {
-  return useRef<SyncStatus>('idle');
+async function getUserId(): Promise<string | null> {
+  const { data } = await supabase.auth.getUser();
+  return data.user?.id ?? null;
 }
 
 // ── Shopping Items ──────────────────────────────────────────────────────────
 
 export async function fetchShoppingItems(): Promise<ShoppingItem[] | null> {
+  const userId = await getUserId();
+  if (!userId) return null;
   const { data, error } = await supabase
     .from('shopping_items')
     .select('*')
-    .eq('device_id', getDeviceId())
+    .eq('user_id', userId)
     .order('created_at', { ascending: true });
   if (error) { console.error('fetch shopping_items:', error); return null; }
   return data.map(r => ({
@@ -29,13 +29,13 @@ export async function fetchShoppingItems(): Promise<ShoppingItem[] | null> {
 }
 
 export async function pushShoppingItems(items: ShoppingItem[]) {
-  const deviceId = getDeviceId();
-  // Delete all then insert (simple full-replace strategy)
-  await supabase.from('shopping_items').delete().eq('device_id', deviceId);
+  const userId = await getUserId();
+  if (!userId) return;
+  await supabase.from('shopping_items').delete().eq('user_id', userId);
   if (items.length === 0) return;
   const rows = items.map(i => ({
     id: i.id,
-    device_id: deviceId,
+    user_id: userId,
     name: i.name,
     category: i.category,
     checked: i.checked,
@@ -50,10 +50,12 @@ export async function pushShoppingItems(items: ShoppingItem[]) {
 // ── Tracker Items ───────────────────────────────────────────────────────────
 
 export async function fetchTrackerItems(): Promise<TrackerItem[] | null> {
+  const userId = await getUserId();
+  if (!userId) return null;
   const { data, error } = await supabase
     .from('tracker_items')
     .select('*')
-    .eq('device_id', getDeviceId());
+    .eq('user_id', userId);
   if (error) { console.error('fetch tracker_items:', error); return null; }
   return data.map(r => ({
     id: r.id,
@@ -67,12 +69,13 @@ export async function fetchTrackerItems(): Promise<TrackerItem[] | null> {
 }
 
 export async function pushTrackerItems(items: TrackerItem[]) {
-  const deviceId = getDeviceId();
-  await supabase.from('tracker_items').delete().eq('device_id', deviceId);
+  const userId = await getUserId();
+  if (!userId) return;
+  await supabase.from('tracker_items').delete().eq('user_id', userId);
   if (items.length === 0) return;
   const rows = items.map(i => ({
     id: i.id,
-    device_id: deviceId,
+    user_id: userId,
     name: i.name,
     quantity: i.quantity,
     unit_price: i.unitPrice,
@@ -87,10 +90,12 @@ export async function pushTrackerItems(items: TrackerItem[]) {
 // ── Saved Purchases ─────────────────────────────────────────────────────────
 
 export async function fetchSavedPurchases(): Promise<SavedPurchase[] | null> {
+  const userId = await getUserId();
+  if (!userId) return null;
   const { data, error } = await supabase
     .from('saved_purchases')
     .select('*')
-    .eq('device_id', getDeviceId())
+    .eq('user_id', userId)
     .order('date', { ascending: false });
   if (error) { console.error('fetch saved_purchases:', error); return null; }
   return data.map(r => ({
@@ -104,12 +109,13 @@ export async function fetchSavedPurchases(): Promise<SavedPurchase[] | null> {
 }
 
 export async function pushSavedPurchases(purchases: SavedPurchase[]) {
-  const deviceId = getDeviceId();
-  await supabase.from('saved_purchases').delete().eq('device_id', deviceId);
+  const userId = await getUserId();
+  if (!userId) return;
+  await supabase.from('saved_purchases').delete().eq('user_id', userId);
   if (purchases.length === 0) return;
   const rows = purchases.map(p => ({
     id: p.id,
-    device_id: deviceId,
+    user_id: userId,
     date: p.date,
     items: p.items,
     total_usd: p.totalUSD,
@@ -118,25 +124,4 @@ export async function pushSavedPurchases(purchases: SavedPurchase[]) {
   }));
   const { error } = await supabase.from('saved_purchases').insert(rows);
   if (error) console.error('push saved_purchases:', error);
-}
-
-// ── Debounced push hook ─────────────────────────────────────────────────────
-
-export function useDebouncedPush<T>(
-  data: T,
-  pushFn: (data: T) => Promise<void>,
-  delay = 1500
-) {
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const isFirst = useRef(true);
-
-  const push = useCallback((d: T) => {
-    if (timer.current) clearTimeout(timer.current);
-    timer.current = setTimeout(() => pushFn(d), delay);
-  }, [pushFn, delay]);
-
-  useEffect(() => {
-    if (isFirst.current) { isFirst.current = false; return; }
-    push(data);
-  }, [data, push]);
 }
