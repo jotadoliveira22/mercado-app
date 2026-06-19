@@ -19,7 +19,8 @@ export default function AuthScreen() {
     setLoading(true);
     try {
       if (mode === 'register') {
-        const { error: e } = await supabase.auth.signUp({ email: email.trim(), password });
+        const redirectTo = `${window.location.origin}/`;
+        const { error: e } = await supabase.auth.signUp({ email: email.trim(), password, options: { emailRedirectTo: redirectTo } });
         if (e) { setError(e.message); }
         else { setInfo('Revisa tu correo para confirmar tu cuenta, luego inicia sesión.'); setMode('login'); }
       } else {
