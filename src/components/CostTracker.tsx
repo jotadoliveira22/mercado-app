@@ -1,8 +1,14 @@
 import { useState, useCallback, useRef } from 'react';
 import { Plus, Trash2, Edit2, Check, X, RefreshCw, Camera, DollarSign, AlertCircle, CreditCard, Save } from 'lucide-react';
 import type { TrackerItem, ExchangeRates, Unit, SavedPurchase } from '../types';
-import { useLocalStorage } from '../hooks/useLocalStorage';
 import { useExchangeRates } from '../hooks/useExchangeRates';
+
+interface Props {
+  trackerItems: TrackerItem[];
+  setTrackerItems: (val: TrackerItem[] | ((prev: TrackerItem[]) => TrackerItem[])) => void;
+  savedPurchases: SavedPurchase[];
+  setSavedPurchases: (val: SavedPurchase[] | ((prev: SavedPurchase[]) => SavedPurchase[])) => void;
+}
 import { lookupBarcode } from '../utils/lookupBarcode';
 import { categorizeProduct } from '../utils/categorize';
 import BarcodeScanner from './BarcodeScanner';
@@ -31,9 +37,7 @@ function UnitToggle({ value, onChange }: { value: Unit; onChange: (u: Unit) => v
   );
 }
 
-export default function CostTracker() {
-  const [items, setItems] = useLocalStorage<TrackerItem[]>('tracker-items', []);
-  const [, setSavedPurchases] = useLocalStorage<SavedPurchase[]>('saved-purchases', []);
+export default function CostTracker({ trackerItems: items, setTrackerItems: setItems, setSavedPurchases }: Props) {
   const { rates, setRates, loading, error, fetchRates } = useExchangeRates();
   const [savedMsg, setSavedMsg] = useState(false);
   const [showScanner, setShowScanner] = useState(false);

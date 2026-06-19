@@ -1,11 +1,15 @@
 import { useState, useMemo, useCallback } from 'react';
 import { Plus, Trash2, ChevronDown, ChevronRight, ShoppingCart, ScanLine } from 'lucide-react';
 import type { ShoppingItem, Category, Unit } from '../types';
-import { useLocalStorage } from '../hooks/useLocalStorage';
 import { categorizeProduct } from '../utils/categorize';
 import { lookupBarcode } from '../utils/lookupBarcode';
 import BarcodeScanner from './BarcodeScanner';
 import NewProductModal from './NewProductModal';
+
+interface Props {
+  items: ShoppingItem[];
+  setItems: (val: ShoppingItem[] | ((prev: ShoppingItem[]) => ShoppingItem[])) => void;
+}
 
 const ALL_CATEGORIES: Category[] = [
   'Lácteos', 'Huevos', 'Carnes y Aves', 'Charcutería y Embutidos',
@@ -41,8 +45,7 @@ const CATEGORY_ICONS: Record<Category, string> = {
   'Otros': '🛒',
 };
 
-export default function ShoppingList() {
-  const [items, setItems] = useLocalStorage<ShoppingItem[]>('shopping-items', []);
+export default function ShoppingList({ items, setItems }: Props) {
   const [input, setInput] = useState('');
   const [quantity, setQuantity] = useState('1');
   const [unit, setUnit] = useState<Unit>('Und');

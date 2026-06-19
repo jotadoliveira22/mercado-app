@@ -1,11 +1,18 @@
-import { useState } from 'react';
-import { ShoppingCart, ShoppingBag, BarChart2, GitCompare } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { ShoppingCart, ShoppingBag, BarChart2, GitCompare, Cloud, CloudOff, Loader } from 'lucide-react';
 import ShoppingList from './components/ShoppingList';
 import CostTracker from './components/CostTracker';
 import Reports from './components/Reports';
 import Comparativa from './components/Comparativa';
+import {
+  fetchShoppingItems, pushShoppingItems,
+  fetchTrackerItems, pushTrackerItems,
+  fetchSavedPurchases, pushSavedPurchases,
+} from './hooks/useSync';
+import type { ShoppingItem, TrackerItem, SavedPurchase } from './types';
 
 type Tab = 'list' | 'cart' | 'reports' | 'compare';
+type SyncState = 'loading' | 'ok' | 'error' | 'offline';
 
 const TABS = [
   { id: 'list',    icon: ShoppingCart, label: 'Lista' },
@@ -16,6 +23,86 @@ const TABS = [
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<Tab>('list');
+  const [syncState, setSyncState] = useState<SyncState>('loading');
+
+  // Shared state lifted here so sync can push on every change
+  const [shoppingItems, setShoppingItemsRaw] = useState<ShoppingItem[]>(() => {
+    try { return JSON.parse(localStorage.getItem('shopping-items') || '[]'); } catch { return []; }
+  });
+  const [trackerItems, setTrackerItemsRaw] = useState<TrackerItem[]>(() => {
+    try { return JSON.parse(localStorage.getItem('tracker-items') || '[]'); } catch { return []; }
+  });
+  const [savedPurchases, setSavedPurchasesRaw] = useState<SavedPurchase[]>(() => {
+    try { return JSON.parse(localStorage.getItem('saved-purchases') || '[]'); } catch { return []; }
+  });
+
+  // Wrapped setters: update localStorage + push to Supabase
+  const setShoppingItems = useCallback((val: ShoppingItem[] | ((prev: ShoppingItem[]) => ShoppingItem[])) => {
+    setShoppingItemsRaw(prev => {
+      const next = val instanceof Function ? val(prev) : val;
+      localStorage.setItem('shopping-items', JSON.stringify(next));
+      pushShoppingItems(next).catch(() => {});
+      return next;
+    });
+  }, []);
+
+  const setTrackerItems = useCallback((val: TrackerItem[] | ((prev: TrackerItem[]) => TrackerItem[])) => {
+    setTrackerItemsRaw(prev => {
+      const next = val instanceof Function ? val(prev) : val;
+      localStorage.setItem('tracker-items', JSON.stringify(next));
+      pushTrackerItems(next).catch(() => {});
+      return next;
+    });
+  }, []);
+
+  const setSavedPurchases = useCallback((val: SavedPurchase[] | ((prev: SavedPurchase[]) => SavedPurchase[])) => {
+    setSavedPurchasesRaw(prev => {
+      const next = val instanceof Function ? val(prev) : val;
+      localStorage.setItem('saved-purchases', JSON.stringify(next));
+      pushSavedPurchases(next).catch(() => {});
+      return next;
+    });
+  }, []);
+
+  // On mount: load from Supabase (cloud takes priority over localStorage)
+  useEffect(() => {
+    let cancelled = false;
+    async function loadFromCloud() {
+      setSyncState('loading');
+      try {
+        const [shopping, tracker, purchases] = await Promise.all([
+          fetchShoppingItems(),
+          fetchTrackerItems(),
+          fetchSavedPurchases(),
+        ]);
+        if (cancelled) return;
+
+        if (shopping !== null) {
+          setShoppingItemsRaw(shopping);
+          localStorage.setItem('shopping-items', JSON.stringify(shopping));
+        }
+        if (tracker !== null) {
+          setTrackerItemsRaw(tracker);
+          localStorage.setItem('tracker-items', JSON.stringify(tracker));
+        }
+        if (purchases !== null) {
+          setSavedPurchasesRaw(purchases);
+          localStorage.setItem('saved-purchases', JSON.stringify(purchases));
+        }
+        setSyncState('ok');
+      } catch {
+        if (!cancelled) setSyncState('error');
+      }
+    }
+    loadFromCloud();
+    return () => { cancelled = true; };
+  }, []);
+
+  const syncIcon = syncState === 'loading'
+    ? <Loader size={13} className="animate-spin text-green-300" />
+    : syncState === 'ok'
+      ? <Cloud size={13} className="text-green-300" />
+      : <CloudOff size={13} className="text-red-400" />;
 
   return (
     <div className="flex flex-col h-screen bg-[#f0fdf4] max-w-lg mx-auto relative">
@@ -29,17 +116,37 @@ export default function App() {
             className="h-16 w-16 object-contain"
           />
         </div>
-        <div>
+        <div className="flex-1">
           <h1 className="text-white font-extrabold text-2xl leading-tight tracking-tight">MarktPlan</h1>
           <p className="text-green-300 text-xs font-medium leading-tight">Tu asistente de mercado</p>
+        </div>
+        <div className="flex flex-col items-center gap-0.5">
+          {syncIcon}
+          <span className="text-[9px] text-green-400">
+            {syncState === 'loading' ? 'Sync...' : syncState === 'ok' ? 'Nube' : 'Error'}
+          </span>
         </div>
       </header>
 
       {/* Contenido */}
       <div className="flex-1 overflow-hidden">
-        {activeTab === 'list'    && <ShoppingList />}
-        {activeTab === 'cart'    && <CostTracker />}
-        {activeTab === 'reports' && <Reports />}
+        {activeTab === 'list' && (
+          <ShoppingList
+            items={shoppingItems}
+            setItems={setShoppingItems}
+          />
+        )}
+        {activeTab === 'cart' && (
+          <CostTracker
+            trackerItems={trackerItems}
+            setTrackerItems={setTrackerItems}
+            savedPurchases={savedPurchases}
+            setSavedPurchases={setSavedPurchases}
+          />
+        )}
+        {activeTab === 'reports' && (
+          <Reports savedPurchases={savedPurchases} />
+        )}
         {activeTab === 'compare' && <Comparativa />}
       </div>
 

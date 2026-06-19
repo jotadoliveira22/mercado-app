@@ -1,7 +1,9 @@
 import { useState, useMemo } from 'react';
 import { BarChart2, ChevronLeft, ChevronRight, X } from 'lucide-react';
 import type { SavedPurchase } from '../types';
-import { useLocalStorage } from '../hooks/useLocalStorage';
+interface Props {
+  savedPurchases: SavedPurchase[];
+}
 
 const CATEGORY_ICONS: Record<string, string> = {
   'Lácteos': '🥛', 'Carnes': '🥩', 'Charcutería': '🍖',
@@ -145,8 +147,7 @@ function PurchaseDetail({ purchase, onClose }: { purchase: SavedPurchase; onClos
 
 type Filter = 'mes' | 'semana' | 'todo';
 
-export default function Reports() {
-  const [purchases] = useLocalStorage<SavedPurchase[]>('saved-purchases', []);
+export default function Reports({ savedPurchases: purchases }: Props) {
   const [calendarDate, setCalendarDate] = useState(() => new Date());
   const [selected, setSelected] = useState<SavedPurchase | null>(null);
   const [filter, setFilter] = useState<Filter>('mes');
