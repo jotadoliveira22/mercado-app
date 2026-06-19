@@ -202,8 +202,8 @@ export default function Reports() {
   if (purchases.length === 0) {
     return (
       <div className="flex flex-col h-full">
-        <div className="bg-white border-b border-gray-100 px-4 pt-3 pb-3">
-          <h2 className="text-gray-800 font-bold text-base">Reportes</h2>
+        <div className="bg-[#14532d] px-4 pt-3 pb-4">
+          <h2 className="text-white font-bold text-lg">Reportes</h2>
         </div>
         <div className="flex flex-col items-center justify-center flex-1 text-gray-400 gap-3 bg-[#f0fdf4]">
           <BarChart2 size={48} strokeWidth={1} />
@@ -217,11 +217,11 @@ export default function Reports() {
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="bg-white border-b border-gray-100 px-4 pt-3 pb-3 flex-shrink-0 space-y-3">
+      <div className="bg-[#14532d] px-4 pt-3 pb-4 flex-shrink-0 space-y-3">
         <div className="flex items-center justify-between">
-          <h2 className="text-gray-800 font-bold text-base">Reportes</h2>
-          <div className="bg-[#166534] rounded-full px-3 py-1">
-            <span className="text-white text-xs font-bold">${totalFiltered.toFixed(2)}</span>
+          <h2 className="text-white font-bold text-lg">Reportes</h2>
+          <div className="bg-white rounded-full px-3 py-1 shadow-sm">
+            <span className="text-[#166534] text-xs font-extrabold">${totalFiltered.toFixed(2)}</span>
           </div>
         </div>
         {/* Filtros */}
@@ -230,7 +230,7 @@ export default function Reports() {
             <button
               key={f}
               onClick={() => setFilter(f)}
-              className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${filter === f ? 'bg-[#166534] text-white shadow-sm' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
+              className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${filter === f ? 'bg-white text-[#166534] shadow-sm' : 'bg-green-800 bg-opacity-60 text-green-300 border border-green-700'}`}
             >
               {f === 'semana' ? 'Esta semana' : f === 'mes' ? 'Este mes' : 'Todo'}
             </button>

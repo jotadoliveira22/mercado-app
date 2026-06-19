@@ -388,19 +388,19 @@ export default function Comparativa() {
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="bg-white border-b border-gray-100 px-4 pt-3 pb-3 flex-shrink-0 space-y-3">
-        <h2 className="text-gray-800 font-bold text-base">Comparativa</h2>
+      <div className="bg-[#14532d] px-4 pt-3 pb-4 flex-shrink-0 space-y-3">
+        <h2 className="text-white font-bold text-lg">Comparativa</h2>
         {/* Selector de modo */}
-        <div className="flex bg-gray-100 rounded-xl p-1 gap-1">
+        <div className="flex bg-green-900 bg-opacity-60 rounded-xl p-1 gap-1">
           <button
             onClick={() => setMode('proporciones')}
-            className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-semibold transition-all ${mode === 'proporciones' ? 'bg-[#166534] text-white shadow-sm' : 'text-gray-500'}`}
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-semibold transition-all ${mode === 'proporciones' ? 'bg-white text-[#166534] shadow-sm' : 'text-green-300'}`}
           >
             <Scale size={14} /> Por Proporciones
           </button>
           <button
             onClick={() => setMode('precios')}
-            className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-semibold transition-all ${mode === 'precios' ? 'bg-[#166534] text-white shadow-sm' : 'text-gray-500'}`}
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-semibold transition-all ${mode === 'precios' ? 'bg-white text-[#166534] shadow-sm' : 'text-green-300'}`}
           >
             <Store size={14} /> Por Establecimientos
           </button>

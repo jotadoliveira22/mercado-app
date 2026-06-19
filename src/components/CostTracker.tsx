@@ -162,16 +162,16 @@ export default function CostTracker() {
   return (
     <div className="flex flex-col h-full">
       {/* Subheader + totals */}
-      <div className="bg-white border-b border-gray-100 px-4 pt-3 pb-3 space-y-3">
-        <h2 className="text-gray-800 font-bold text-base">Carrito de Compras</h2>
+      <div className="bg-[#14532d] px-4 pt-3 pb-4 space-y-3">
+        <h2 className="text-white font-bold text-lg">Carrito de Compras</h2>
 
         {/* Total cards */}
         <div className="grid grid-cols-3 gap-2">
-          <div className="bg-[#166534] rounded-2xl px-3 py-3 text-center shadow-sm">
-            <p className="text-green-200 text-[10px] font-semibold uppercase tracking-wide">Total USD</p>
-            <p className="text-white font-extrabold text-base mt-0.5">${totalUSD.toFixed(2)}</p>
+          <div className="bg-white rounded-2xl px-3 py-3 text-center shadow-sm">
+            <p className="text-gray-400 text-[10px] font-semibold uppercase tracking-wide">Total USD</p>
+            <p className="text-[#166534] font-extrabold text-base mt-0.5">${totalUSD.toFixed(2)}</p>
           </div>
-          <div className="bg-[#14532d] rounded-2xl px-3 py-3 text-center shadow-sm">
+          <div className="bg-[#166534] rounded-2xl px-3 py-3 text-center shadow-sm">
             <p className="text-green-300 text-[10px] font-semibold uppercase tracking-wide">BCV</p>
             <p className="text-white font-extrabold text-sm mt-0.5">Bs {formatBs(totalUSD, rates.bcv)}</p>
           </div>
@@ -184,26 +184,26 @@ export default function CostTracker() {
         {/* Cashea toggle */}
         <button
           onClick={() => setShowCashea(v => !v)}
-          className="w-full flex items-center justify-between bg-green-50 border border-green-200 rounded-xl px-4 py-2.5 transition-colors hover:bg-green-100"
+          className="w-full flex items-center justify-between bg-green-800 bg-opacity-60 border border-green-600 rounded-xl px-4 py-2.5 transition-colors hover:bg-green-700"
         >
           <div className="flex items-center gap-2">
-            <CreditCard size={15} className="text-[#166534]" />
-            <span className="text-[#166534] text-sm font-semibold">Inicial Cashea</span>
+            <CreditCard size={15} className="text-green-300" />
+            <span className="text-white text-sm font-semibold">Inicial Cashea</span>
           </div>
           <span className="text-green-400 text-xs">{showCashea ? '▲' : '▼'}</span>
         </button>
 
         {/* Cashea panel */}
         {showCashea && (
-          <div className="bg-green-50 border border-green-100 rounded-2xl px-3 py-3 space-y-2">
+          <div className="bg-green-900 bg-opacity-50 border border-green-700 rounded-2xl px-3 py-3 space-y-2">
             <div className="flex items-center gap-2">
-              <span className="text-gray-500 text-xs font-medium">Inicial:</span>
-              <div className="flex rounded-lg overflow-hidden border border-green-300">
+              <span className="text-green-300 text-xs font-medium">Inicial:</span>
+              <div className="flex rounded-lg overflow-hidden border border-green-600">
                 {([20, 40] as CasheaRate[]).map(r => (
                   <button
                     key={r}
                     onClick={() => setCasheaRate(r)}
-                    className={`px-4 py-1 text-sm font-bold transition-colors ${casheaRate === r ? 'bg-[#166534] text-white' : 'text-[#166534] hover:bg-green-100'}`}
+                    className={`px-4 py-1 text-sm font-bold transition-colors ${casheaRate === r ? 'bg-white text-[#166534]' : 'text-white hover:bg-green-700'}`}
                   >
                     {r}%
                   </button>
@@ -211,17 +211,17 @@ export default function CostTracker() {
               </div>
             </div>
             <div className="grid grid-cols-3 gap-2">
-              <div className="bg-white rounded-xl px-2 py-2 text-center border border-green-100">
-                <p className="text-gray-400 text-[10px]">USD</p>
-                <p className="text-[#166534] font-bold text-sm">${casheaUSD.toFixed(2)}</p>
+              <div className="bg-white bg-opacity-10 rounded-xl px-2 py-2 text-center">
+                <p className="text-green-300 text-[10px]">USD</p>
+                <p className="text-white font-bold text-sm">${casheaUSD.toFixed(2)}</p>
               </div>
-              <div className="bg-white rounded-xl px-2 py-2 text-center border border-green-100">
-                <p className="text-gray-400 text-[10px]">BCV</p>
-                <p className="text-[#166534] font-bold text-sm">Bs {formatBs(casheaUSD, rates.bcv)}</p>
+              <div className="bg-white bg-opacity-10 rounded-xl px-2 py-2 text-center">
+                <p className="text-green-300 text-[10px]">BCV</p>
+                <p className="text-white font-bold text-sm">Bs {formatBs(casheaUSD, rates.bcv)}</p>
               </div>
-              <div className="bg-white rounded-xl px-2 py-2 text-center border border-green-100">
-                <p className="text-gray-400 text-[10px]">USDT</p>
-                <p className="text-[#166534] font-bold text-sm">{casheaUSDT ? casheaUSDT.toFixed(4) + ' $' : '—'}</p>
+              <div className="bg-white bg-opacity-10 rounded-xl px-2 py-2 text-center">
+                <p className="text-green-300 text-[10px]">USDT</p>
+                <p className="text-white font-bold text-sm">{casheaUSDT ? casheaUSDT.toFixed(4) + ' $' : '—'}</p>
               </div>
             </div>
           </div>

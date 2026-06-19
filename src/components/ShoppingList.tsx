@@ -115,30 +115,33 @@ export default function ShoppingList() {
       )}
 
       {/* Subheader */}
-      <div className="bg-white px-4 pt-3 pb-3 border-b border-gray-100">
+      <div className="bg-[#14532d] px-4 pt-3 pb-4">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-gray-800 font-bold text-base">Lista de Compras</h2>
+            <h2 className="text-white font-bold text-lg">Lista de Compras</h2>
             {totalCount > 0 && (
-              <p className="text-xs text-gray-400 mt-0.5">{checkedCount} de {totalCount} productos</p>
+              <p className="text-green-300 text-xs mt-0.5">{checkedCount} de {totalCount} productos</p>
+            )}
+            {totalCount === 0 && (
+              <p className="text-green-300 text-xs mt-0.5">Agrega productos a tu lista</p>
             )}
           </div>
           {totalCount > 0 && (
-            <div className="flex items-center gap-2">
-              <div className="w-24 bg-gray-100 rounded-full h-2">
+            <div className="flex flex-col items-end gap-1">
+              <span className="text-white font-extrabold text-lg">{Math.round((checkedCount / totalCount) * 100)}%</span>
+              <div className="w-24 bg-green-900 rounded-full h-2">
                 <div
-                  className="bg-[#166534] rounded-full h-2 transition-all duration-500"
+                  className="bg-green-300 rounded-full h-2 transition-all duration-500"
                   style={{ width: `${(checkedCount / totalCount) * 100}%` }}
                 />
               </div>
-              <span className="text-xs font-bold text-[#166534]">{Math.round((checkedCount / totalCount) * 100)}%</span>
             </div>
           )}
         </div>
       </div>
 
       {/* Add item */}
-      <div className="px-4 py-3 bg-[#f0fdf4] border-b border-gray-100 space-y-2">
+      <div className="px-4 py-3 bg-white border-b border-gray-100 space-y-2">
         <div className="flex gap-2">
           <input
             type="text"

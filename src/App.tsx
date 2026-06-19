@@ -21,15 +21,17 @@ export default function App() {
     <div className="flex flex-col h-screen bg-[#f0fdf4] max-w-lg mx-auto relative">
 
       {/* Top header global */}
-      <header className="bg-white border-b border-gray-100 shadow-sm flex-shrink-0 px-4 py-3 flex items-center gap-3">
-        <img
-          src="/Gemini_Generated_Image_5vn8ws5vn8ws5vn8.png"
-          alt="MarktPlan"
-          className="h-9 w-9 object-contain"
-        />
+      <header className="bg-[#166534] flex-shrink-0 px-5 py-4 flex items-center gap-4 shadow-lg">
+        <div className="bg-white rounded-2xl p-1.5 shadow-md flex-shrink-0">
+          <img
+            src="/logo.png"
+            alt="MarktPlan"
+            className="h-12 w-12 object-contain"
+          />
+        </div>
         <div>
-          <h1 className="text-[#166534] font-extrabold text-lg leading-tight">MarktPlan</h1>
-          <p className="text-gray-400 text-[10px] leading-tight">Tu asistente de mercado</p>
+          <h1 className="text-white font-extrabold text-2xl leading-tight tracking-tight">MarktPlan</h1>
+          <p className="text-green-300 text-xs font-medium leading-tight">Tu asistente de mercado</p>
         </div>
       </header>
 
@@ -42,7 +44,7 @@ export default function App() {
       </div>
 
       {/* Bottom nav */}
-      <nav className="bg-white border-t border-gray-100 shadow-[0_-2px_12px_rgba(0,0,0,0.06)] flex-shrink-0 px-2 py-1">
+      <nav className="bg-[#166534] flex-shrink-0 px-2 py-1 shadow-[0_-2px_16px_rgba(0,0,0,0.2)]">
         <div className="flex">
           {TABS.map(({ id, icon: Icon, label }) => {
             const active = activeTab === id;
@@ -52,10 +54,10 @@ export default function App() {
                 onClick={() => setActiveTab(id)}
                 className="flex-1 flex flex-col items-center gap-0.5 py-2 px-1 transition-all"
               >
-                <div className={`flex items-center justify-center w-10 h-7 rounded-full transition-all ${active ? 'bg-[#166534]' : ''}`}>
-                  <Icon size={18} className={active ? 'text-white' : 'text-gray-400'} />
+                <div className={`flex items-center justify-center w-11 h-7 rounded-xl transition-all ${active ? 'bg-white' : ''}`}>
+                  <Icon size={18} className={active ? 'text-[#166534]' : 'text-green-300'} />
                 </div>
-                <span className={`text-[10px] font-semibold transition-colors ${active ? 'text-[#166534]' : 'text-gray-400'}`}>
+                <span className={`text-[10px] font-bold transition-colors ${active ? 'text-white' : 'text-green-400'}`}>
                   {label}
                 </span>
               </button>
