@@ -22,11 +22,11 @@ export default function App() {
 
       {/* Top header global */}
       <header className="bg-[#166534] flex-shrink-0 px-5 py-4 flex items-center gap-4 shadow-lg">
-        <div className="bg-white rounded-2xl p-1.5 shadow-md flex-shrink-0">
+        <div className="bg-white rounded-2xl p-2 shadow-md flex-shrink-0">
           <img
             src="/logo.png"
             alt="MarktPlan"
-            className="h-12 w-12 object-contain"
+            className="h-16 w-16 object-contain"
           />
         </div>
         <div>
