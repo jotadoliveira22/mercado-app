@@ -211,17 +211,17 @@ export default function CostTracker() {
               </div>
             </div>
             <div className="grid grid-cols-3 gap-2">
-              <div className="bg-white bg-opacity-10 rounded-xl px-2 py-2 text-center">
-                <p className="text-green-300 text-[10px]">USD</p>
-                <p className="text-white font-bold text-sm">${casheaUSD.toFixed(2)}</p>
+              <div className="bg-white rounded-xl px-2 py-2 text-center">
+                <p className="text-gray-500 text-[10px] font-semibold">USD</p>
+                <p className="text-[#166534] font-bold text-sm">${casheaUSD.toFixed(2)}</p>
               </div>
-              <div className="bg-white bg-opacity-10 rounded-xl px-2 py-2 text-center">
-                <p className="text-green-300 text-[10px]">BCV</p>
-                <p className="text-white font-bold text-sm">Bs {formatBs(casheaUSD, rates.bcv)}</p>
+              <div className="bg-white rounded-xl px-2 py-2 text-center">
+                <p className="text-gray-500 text-[10px] font-semibold">BCV</p>
+                <p className="text-[#166534] font-bold text-sm">Bs {formatBs(casheaUSD, rates.bcv)}</p>
               </div>
-              <div className="bg-white bg-opacity-10 rounded-xl px-2 py-2 text-center">
-                <p className="text-green-300 text-[10px]">USDT</p>
-                <p className="text-white font-bold text-sm">{casheaUSDT ? casheaUSDT.toFixed(4) + ' $' : '—'}</p>
+              <div className="bg-white rounded-xl px-2 py-2 text-center">
+                <p className="text-gray-500 text-[10px] font-semibold">USDT</p>
+                <p className="text-[#166534] font-bold text-sm">{casheaUSDT ? casheaUSDT.toFixed(4) + ' $' : '—'}</p>
               </div>
             </div>
           </div>
