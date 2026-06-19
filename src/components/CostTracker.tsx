@@ -39,7 +39,7 @@ export default function CostTracker() {
   const [showScanner, setShowScanner] = useState(false);
   const [unknownBarcode, setUnknownBarcode] = useState<string | null>(null);
   const [manualBcv, setManualBcv] = useState('');
-  const [manualBinance, setManualBinance] = useState('');
+  const [manualUsdt, setManualUsdt] = useState('');
   const [casheaRate, setCasheaRate] = useState<CasheaRate>(20);
   const [showCashea, setShowCashea] = useState(false);
 
@@ -49,7 +49,12 @@ export default function CostTracker() {
   const [loadingProduct, setLoadingProduct] = useState(false);
 
   const totalUSD = items.reduce((sum, i) => sum + i.quantity * i.unitPrice, 0);
+  const totalBs = rates.bcv ? totalUSD * rates.bcv : null;
+  // USDT = Bs BCV ÷ tasa USDT (dólar paralelo)
+  const totalUSDT = totalBs && rates.usdt ? totalBs / rates.usdt : null;
   const casheaUSD = totalUSD * (casheaRate / 100);
+  const casheaBs = rates.bcv ? casheaUSD * rates.bcv : null;
+  const casheaUSDT = casheaBs && rates.usdt ? casheaBs / rates.usdt : null;
 
   const handleScan = useCallback(async (barcode: string) => {
     setShowScanner(false);
@@ -83,7 +88,7 @@ export default function CostTracker() {
       items: items.map(i => ({ ...i, category: i.category ?? categorizeProduct(i.name) })),
       totalUSD,
       totalBCV: rates.bcv ? totalUSD * rates.bcv : null,
-      totalBinance: rates.binance ? totalUSD * rates.binance : null,
+      totalBinance: totalUSDT,
     };
     setSavedPurchases(prev => [...prev, purchase]);
     setItems([]);
@@ -109,10 +114,11 @@ export default function CostTracker() {
     setEditingId(null);
   };
 
-  const applyBinance = () => {
-    const b = parseFloat(manualBinance);
+  const applyUsdt = () => {
+    const b = parseFloat(manualUsdt);
     if (!isNaN(b) && b > 0) {
-      setRates((prev: ExchangeRates) => ({ ...prev, binance: b, lastUpdated: Date.now() }));
+      setRates((prev: ExchangeRates) => ({ ...prev, usdt: b, lastUpdated: Date.now() }));
+      setManualUsdt('');
     }
   };
 
@@ -149,8 +155,8 @@ export default function CostTracker() {
             <p className="text-white font-bold text-sm">Bs {formatBs(totalUSD, rates.bcv)}</p>
           </div>
           <div className="bg-green-600 rounded-xl px-3 py-2 text-center">
-            <p className="text-green-200 text-xs font-medium">Binance</p>
-            <p className="text-white font-bold text-sm">Bs {formatBs(totalUSD, rates.binance)}</p>
+            <p className="text-green-200 text-xs font-medium">USDT</p>
+            <p className="text-white font-bold text-sm">{totalUSDT ? totalUSDT.toFixed(4) + ' $' : '—'}</p>
           </div>
         </div>
 
@@ -195,8 +201,8 @@ export default function CostTracker() {
                 <p className="text-white font-bold text-sm">Bs {formatBs(casheaUSD, rates.bcv)}</p>
               </div>
               <div className="bg-green-700 rounded-lg px-2 py-1.5 text-center">
-                <p className="text-green-300 text-xs">Binance</p>
-                <p className="text-white font-bold text-sm">Bs {formatBs(casheaUSD, rates.binance)}</p>
+                <p className="text-green-300 text-xs">USDT</p>
+                <p className="text-white font-bold text-sm">{casheaUSDT ? casheaUSDT.toFixed(4) + ' $' : '—'}</p>
               </div>
             </div>
           </div>
@@ -227,19 +233,22 @@ export default function CostTracker() {
           </button>
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-xs text-gray-500 w-16 flex-shrink-0">Binance:</span>
-          <div className="flex flex-1 gap-1">
-            <input
-              type="number"
-              placeholder={rates.binance ? String(rates.binance) : 'Tasa Binance'}
-              value={manualBinance}
-              onChange={e => setManualBinance(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && applyBinance()}
-              className="flex-1 border border-gray-300 rounded-lg px-2 py-1 text-xs"
-            />
-            <button onClick={applyBinance} className="bg-green-700 text-white rounded-lg px-2 py-1 text-xs">OK</button>
-          </div>
-          {rates.binance && <span className="text-xs font-semibold text-gray-700 flex-shrink-0">Bs {rates.binance.toFixed(2)}</span>}
+          <span className="text-xs text-gray-500 w-16 flex-shrink-0">USDT:</span>
+          {rates.usdt ? (
+            <span className="text-xs font-semibold text-gray-800 flex-1">Bs {rates.usdt.toFixed(2)}</span>
+          ) : (
+            <div className="flex flex-1 gap-1">
+              <input
+                type="number"
+                placeholder="Tasa USDT"
+                value={manualUsdt}
+                onChange={e => setManualUsdt(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && applyUsdt()}
+                className="flex-1 border border-gray-300 rounded-lg px-2 py-1 text-xs"
+              />
+              <button onClick={applyUsdt} className="bg-green-700 text-white rounded-lg px-2 py-1 text-xs">OK</button>
+            </div>
+          )}
         </div>
         {error && (
           <div className="flex items-center gap-1 text-xs text-amber-600">
