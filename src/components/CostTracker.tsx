@@ -1,9 +1,10 @@
 import { useState, useCallback } from 'react';
-import { Plus, Trash2, Edit2, Check, X, RefreshCw, Camera, DollarSign, AlertCircle, CreditCard } from 'lucide-react';
-import type { TrackerItem, ExchangeRates, Unit } from '../types';
+import { Plus, Trash2, Edit2, Check, X, RefreshCw, Camera, DollarSign, AlertCircle, CreditCard, Save } from 'lucide-react';
+import type { TrackerItem, ExchangeRates, Unit, SavedPurchase } from '../types';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import { useExchangeRates } from '../hooks/useExchangeRates';
 import { lookupBarcode } from '../utils/lookupBarcode';
+import { categorizeProduct } from '../utils/categorize';
 import BarcodeScanner from './BarcodeScanner';
 import NewProductModal from './NewProductModal';
 
@@ -32,7 +33,9 @@ function UnitToggle({ value, onChange }: { value: Unit; onChange: (u: Unit) => v
 
 export default function CostTracker() {
   const [items, setItems] = useLocalStorage<TrackerItem[]>('tracker-items', []);
+  const [, setSavedPurchases] = useLocalStorage<SavedPurchase[]>('saved-purchases', []);
   const { rates, setRates, loading, error, fetchRates } = useExchangeRates();
+  const [savedMsg, setSavedMsg] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
   const [unknownBarcode, setUnknownBarcode] = useState<string | null>(null);
   const [manualBcv, setManualBcv] = useState('');
@@ -65,8 +68,27 @@ export default function CostTracker() {
     const quantity = parseFloat(form.quantity);
     const unitPrice = parseFloat(form.unitPrice);
     if (!name || isNaN(quantity) || isNaN(unitPrice) || quantity <= 0 || unitPrice < 0) return;
-    setItems(prev => [...prev, { id: crypto.randomUUID(), name, quantity, unitPrice, unit: form.unit }]);
+    setItems(prev => [...prev, {
+      id: crypto.randomUUID(), name, quantity, unitPrice,
+      unit: form.unit, category: categorizeProduct(name),
+    }]);
     setForm({ name: '', quantity: '1', unitPrice: '', unit: 'Und' });
+  };
+
+  const savePurchase = () => {
+    if (items.length === 0) return;
+    const purchase: SavedPurchase = {
+      id: crypto.randomUUID(),
+      date: Date.now(),
+      items: items.map(i => ({ ...i, category: i.category ?? categorizeProduct(i.name) })),
+      totalUSD,
+      totalBCV: rates.bcv ? totalUSD * rates.bcv : null,
+      totalBinance: rates.binance ? totalUSD * rates.binance : null,
+    };
+    setSavedPurchases(prev => [...prev, purchase]);
+    setItems([]);
+    setSavedMsg(true);
+    setTimeout(() => setSavedMsg(false), 3000);
   };
 
   const deleteItem = (id: string) => setItems(prev => prev.filter(i => i.id !== id));
@@ -338,6 +360,24 @@ export default function CostTracker() {
           ))
         )}
       </div>
+
+      {/* Guardar compra */}
+      {items.length > 0 && (
+        <div className="px-4 pb-4">
+          <button
+            onClick={savePurchase}
+            className="w-full bg-green-700 hover:bg-green-600 active:bg-green-800 text-white rounded-2xl py-3 font-semibold flex items-center justify-center gap-2 transition-colors shadow-md"
+          >
+            <Save size={18} />
+            Guardar Compra
+          </button>
+        </div>
+      )}
+      {savedMsg && (
+        <div className="fixed bottom-20 left-1/2 -translate-x-1/2 bg-green-700 text-white text-sm font-medium px-5 py-2.5 rounded-full shadow-lg z-50">
+          ✓ Compra guardada correctamente
+        </div>
+      )}
 
       {showScanner && (
         <BarcodeScanner onScan={handleScan} onClose={() => setShowScanner(false)} />

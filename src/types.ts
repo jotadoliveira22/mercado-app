@@ -1,13 +1,16 @@
 export type Category =
   | 'Lácteos'
   | 'Carnes'
+  | 'Charcutería'
   | 'Frutas y Verduras'
   | 'Panadería'
   | 'Bebidas'
   | 'Limpieza'
   | 'Higiene Personal'
-  | 'Enlatados'
+  | 'Enlatados y Granos'
   | 'Congelados'
+  | 'Cereales y Pastas'
+  | 'Condimentos'
   | 'Otros';
 
 export type Unit = 'Und' | 'Kg';
@@ -28,7 +31,17 @@ export interface TrackerItem {
   quantity: number;
   unitPrice: number;
   unit: Unit;
+  category?: Category;
   barcode?: string;
+}
+
+export interface SavedPurchase {
+  id: string;
+  date: number;
+  items: TrackerItem[];
+  totalUSD: number;
+  totalBCV: number | null;
+  totalBinance: number | null;
 }
 
 export interface ExchangeRates {

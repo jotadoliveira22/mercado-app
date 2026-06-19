@@ -8,20 +8,24 @@ import BarcodeScanner from './BarcodeScanner';
 import NewProductModal from './NewProductModal';
 
 const ALL_CATEGORIES: Category[] = [
-  'Lácteos', 'Carnes', 'Frutas y Verduras', 'Panadería', 'Bebidas',
-  'Limpieza', 'Higiene Personal', 'Enlatados', 'Congelados', 'Otros'
+  'Lácteos', 'Carnes', 'Charcutería', 'Frutas y Verduras', 'Panadería',
+  'Cereales y Pastas', 'Bebidas', 'Condimentos', 'Enlatados y Granos',
+  'Congelados', 'Limpieza', 'Higiene Personal', 'Otros'
 ];
 
 const CATEGORY_ICONS: Record<Category, string> = {
   'Lácteos': '🥛',
   'Carnes': '🥩',
+  'Charcutería': '🍖',
   'Frutas y Verduras': '🥦',
   'Panadería': '🍞',
+  'Cereales y Pastas': '🍝',
   'Bebidas': '🥤',
+  'Condimentos': '🧂',
+  'Enlatados y Granos': '🥫',
+  'Congelados': '🧊',
   'Limpieza': '🧹',
   'Higiene Personal': '🧴',
-  'Enlatados': '🥫',
-  'Congelados': '🧊',
   'Otros': '🛒',
 };
 
