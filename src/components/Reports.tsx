@@ -202,13 +202,10 @@ export default function Reports() {
   if (purchases.length === 0) {
     return (
       <div className="flex flex-col h-full">
-        <div className="bg-green-700 px-4 py-4 shadow-md">
-          <div className="flex items-center gap-2">
-            <BarChart2 className="text-white" size={22} />
-            <h1 className="text-white font-bold text-xl">Reportes</h1>
-          </div>
+        <div className="bg-white border-b border-gray-100 px-4 pt-3 pb-3">
+          <h2 className="text-gray-800 font-bold text-base">Reportes</h2>
         </div>
-        <div className="flex flex-col items-center justify-center flex-1 text-gray-400 gap-3">
+        <div className="flex flex-col items-center justify-center flex-1 text-gray-400 gap-3 bg-[#f0fdf4]">
           <BarChart2 size={48} strokeWidth={1} />
           <p className="text-base">Sin compras guardadas</p>
           <p className="text-sm text-center px-8">Guarda tu primera compra desde la Calculadora</p>
@@ -220,10 +217,12 @@ export default function Reports() {
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="bg-green-700 px-4 py-4 shadow-md flex-shrink-0">
-        <div className="flex items-center gap-2 mb-3">
-          <BarChart2 className="text-white" size={22} />
-          <h1 className="text-white font-bold text-xl">Reportes</h1>
+      <div className="bg-white border-b border-gray-100 px-4 pt-3 pb-3 flex-shrink-0 space-y-3">
+        <div className="flex items-center justify-between">
+          <h2 className="text-gray-800 font-bold text-base">Reportes</h2>
+          <div className="bg-[#166534] rounded-full px-3 py-1">
+            <span className="text-white text-xs font-bold">${totalFiltered.toFixed(2)}</span>
+          </div>
         </div>
         {/* Filtros */}
         <div className="flex gap-2">
@@ -231,18 +230,15 @@ export default function Reports() {
             <button
               key={f}
               onClick={() => setFilter(f)}
-              className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors capitalize ${filter === f ? 'bg-white text-green-700' : 'bg-green-600 text-white'}`}
+              className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${filter === f ? 'bg-[#166534] text-white shadow-sm' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
             >
               {f === 'semana' ? 'Esta semana' : f === 'mes' ? 'Este mes' : 'Todo'}
             </button>
           ))}
-          <div className="ml-auto bg-green-600 rounded-full px-3 py-1">
-            <span className="text-white text-xs font-semibold">${totalFiltered.toFixed(2)}</span>
-          </div>
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto bg-[#f0fdf4]">
         {/* Calendario */}
         <div className="bg-white mx-4 mt-4 rounded-2xl shadow-sm border border-gray-100 p-4">
           <div className="flex items-center justify-between mb-3">

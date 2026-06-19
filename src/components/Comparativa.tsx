@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { GitCompare, Plus, Trash2, Check, Camera, Store, Scale } from 'lucide-react';
+import { Plus, Trash2, Check, Camera, Store, Scale } from 'lucide-react';
 import BarcodeScanner from './BarcodeScanner';
 import { lookupBarcode } from '../utils/lookupBarcode';
 
@@ -388,22 +388,19 @@ export default function Comparativa() {
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="bg-green-700 px-4 py-4 shadow-md flex-shrink-0">
-        <div className="flex items-center gap-2 mb-3">
-          <GitCompare className="text-white" size={22} />
-          <h1 className="text-white font-bold text-xl">Comparativa</h1>
-        </div>
+      <div className="bg-white border-b border-gray-100 px-4 pt-3 pb-3 flex-shrink-0 space-y-3">
+        <h2 className="text-gray-800 font-bold text-base">Comparativa</h2>
         {/* Selector de modo */}
-        <div className="flex bg-green-600 rounded-xl p-1 gap-1">
+        <div className="flex bg-gray-100 rounded-xl p-1 gap-1">
           <button
             onClick={() => setMode('proporciones')}
-            className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-semibold transition-colors ${mode === 'proporciones' ? 'bg-white text-green-700' : 'text-white'}`}
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-semibold transition-all ${mode === 'proporciones' ? 'bg-[#166534] text-white shadow-sm' : 'text-gray-500'}`}
           >
             <Scale size={14} /> Por Proporciones
           </button>
           <button
             onClick={() => setMode('precios')}
-            className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-semibold transition-colors ${mode === 'precios' ? 'bg-white text-green-700' : 'text-white'}`}
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-semibold transition-all ${mode === 'precios' ? 'bg-[#166534] text-white shadow-sm' : 'text-gray-500'}`}
           >
             <Store size={14} /> Por Establecimientos
           </button>
@@ -411,7 +408,7 @@ export default function Comparativa() {
       </div>
 
       {/* Contenido */}
-      <div className="flex-1 overflow-y-auto px-4 py-4">
+      <div className="flex-1 overflow-y-auto px-4 py-4 bg-[#f0fdf4]">
         {mode === 'proporciones' ? <PropComparison /> : <PriceComparison />}
       </div>
     </div>

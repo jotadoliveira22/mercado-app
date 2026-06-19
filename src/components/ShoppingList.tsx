@@ -114,31 +114,31 @@ export default function ShoppingList() {
         />
       )}
 
-      {/* Header */}
-      <div className="bg-green-700 px-4 py-4 shadow-md">
-        <div className="flex items-center gap-2 mb-3">
-          <ShoppingCart className="text-white" size={22} />
-          <h1 className="text-white font-bold text-xl">Lista de Compras</h1>
-        </div>
-        {totalCount > 0 && (
-          <div className="flex items-center justify-between">
-            <div className="bg-green-600 rounded-full px-3 py-1">
-              <span className="text-white text-sm font-medium">
-                {checkedCount} de {totalCount} items comprados
-              </span>
-            </div>
-            <div className="w-32 bg-green-900 rounded-full h-2">
-              <div
-                className="bg-white rounded-full h-2 transition-all duration-500"
-                style={{ width: totalCount > 0 ? `${(checkedCount / totalCount) * 100}%` : '0%' }}
-              />
-            </div>
+      {/* Subheader */}
+      <div className="bg-white px-4 pt-3 pb-3 border-b border-gray-100">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-gray-800 font-bold text-base">Lista de Compras</h2>
+            {totalCount > 0 && (
+              <p className="text-xs text-gray-400 mt-0.5">{checkedCount} de {totalCount} productos</p>
+            )}
           </div>
-        )}
+          {totalCount > 0 && (
+            <div className="flex items-center gap-2">
+              <div className="w-24 bg-gray-100 rounded-full h-2">
+                <div
+                  className="bg-[#166534] rounded-full h-2 transition-all duration-500"
+                  style={{ width: `${(checkedCount / totalCount) * 100}%` }}
+                />
+              </div>
+              <span className="text-xs font-bold text-[#166534]">{Math.round((checkedCount / totalCount) * 100)}%</span>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Add item */}
-      <div className="px-4 py-3 bg-white border-b border-gray-100 shadow-sm space-y-2">
+      <div className="px-4 py-3 bg-[#f0fdf4] border-b border-gray-100 space-y-2">
         <div className="flex gap-2">
           <input
             type="text"
@@ -190,7 +190,7 @@ export default function ShoppingList() {
       </div>
 
       {/* List */}
-      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
+      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3 bg-[#f0fdf4]">
         {items.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-gray-400 gap-3 py-16">
             <ShoppingCart size={48} strokeWidth={1} />
