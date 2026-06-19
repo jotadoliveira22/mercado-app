@@ -46,6 +46,6 @@ export interface SavedPurchase {
 
 export interface ExchangeRates {
   bcv: number | null;
-  binance: number | null;
+  usdt: number | null;
   lastUpdated: number | null;
 }

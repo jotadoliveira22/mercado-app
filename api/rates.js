@@ -23,20 +23,20 @@ async function getRate(urls) {
 }
 
 export default async function handler() {
-  const [bcv, binance] = await Promise.all([
+  const [bcv, usdt] = await Promise.all([
     getRate([
       'https://ve.dolarapi.com/v1/dolares/oficial',
       'https://pydolarve.org/api/v1/dollar?monitor=bcv',
-      'https://api.yadio.io/exrates/VES',
     ]),
+    // Dólar Paralelo = referencia USDT según dolarapi.com
     getRate([
-      'https://ve.dolarapi.com/v1/dolares/binance',
-      'https://pydolarve.org/api/v1/dollar?monitor=binance',
+      'https://ve.dolarapi.com/v1/dolares/paralelo',
+      'https://pydolarve.org/api/v1/dollar?monitor=paralelo',
       'https://pydolarve.org/api/v1/dollar?monitor=enparalelovzla',
     ]),
   ]);
 
-  return new Response(JSON.stringify({ bcv, binance }), {
+  return new Response(JSON.stringify({ bcv, usdt }), {
     headers: {
       'Content-Type': 'application/json',
       'Cache-Control': 'no-store',
