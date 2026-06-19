@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { Plus, Trash2, Edit2, Check, X, RefreshCw, Camera, DollarSign, AlertCircle, CreditCard, Save } from 'lucide-react';
 import type { TrackerItem, ExchangeRates, Unit, SavedPurchase } from '../types';
 import { useLocalStorage } from '../hooks/useLocalStorage';
@@ -43,10 +43,13 @@ export default function CostTracker() {
   const [casheaRate, setCasheaRate] = useState<CasheaRate>(20);
   const [showCashea, setShowCashea] = useState(false);
 
-  const [form, setForm] = useState({ name: '', quantity: '1', unitPrice: '', unit: 'Und' as Unit });
+  const [form, setForm] = useState({ name: '', quantity: '', unitPrice: '', unit: 'Und' as Unit });
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({ name: '', quantity: '1', unitPrice: '', unit: 'Und' as Unit });
   const [loadingProduct, setLoadingProduct] = useState(false);
+  // Kg weight accumulator
+  const [kgParcials, setKgParcials] = useState<number[]>([]);
+  const kgInputRef = useRef<HTMLInputElement>(null);
 
   const totalUSD = items.reduce((sum, i) => sum + i.quantity * i.unitPrice, 0);
   const totalBs = rates.bcv ? totalUSD * rates.bcv : null;
@@ -68,16 +71,37 @@ export default function CostTracker() {
     }
   }, []);
 
+  const kgTotal = kgParcials.reduce((s, v) => s + v, 0);
+
+  const addKgParcial = () => {
+    const v = parseFloat(form.quantity);
+    if (isNaN(v) || v <= 0) return;
+    setKgParcials(prev => [...prev, v]);
+    setForm(prev => ({ ...prev, quantity: '' }));
+    kgInputRef.current?.focus();
+  };
+
+  const removeKgParcial = (idx: number) =>
+    setKgParcials(prev => prev.filter((_, i) => i !== idx));
+
   const addItem = () => {
     const name = form.name.trim();
-    const quantity = parseFloat(form.quantity);
     const unitPrice = parseFloat(form.unitPrice);
+    let quantity: number;
+    if (form.unit === 'Kg') {
+      const inputVal = parseFloat(form.quantity);
+      const accumulated = kgTotal + (isNaN(inputVal) || inputVal <= 0 ? 0 : inputVal);
+      quantity = accumulated > 0 ? accumulated : 0;
+    } else {
+      quantity = parseFloat(form.quantity);
+    }
     if (!name || isNaN(quantity) || isNaN(unitPrice) || quantity <= 0 || unitPrice < 0) return;
     setItems(prev => [...prev, {
       id: crypto.randomUUID(), name, quantity, unitPrice,
       unit: form.unit, category: categorizeProduct(name),
     }]);
-    setForm({ name: '', quantity: '1', unitPrice: '', unit: 'Und' });
+    setForm({ name: '', quantity: '', unitPrice: '', unit: form.unit });
+    setKgParcials([]);
   };
 
   const savePurchase = () => {
@@ -277,18 +301,37 @@ export default function CostTracker() {
             <Camera size={18} />
           </button>
         </div>
+
         {/* Row 2: qty | und/kg | price | add */}
         <div className="flex gap-2 items-center">
           <input
+            ref={kgInputRef}
             type="number"
             value={form.quantity}
             onChange={e => setForm(prev => ({ ...prev, quantity: e.target.value }))}
-            placeholder="Cant."
-            min="0.1"
-            step="0.1"
-            className="w-16 border border-gray-300 rounded-xl px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 text-center"
+            onKeyDown={e => {
+              if (e.key === 'Enter') {
+                if (form.unit === 'Kg') addKgParcial();
+                else addItem();
+              }
+            }}
+            placeholder={form.unit === 'Kg' ? '0.000' : 'Cant.'}
+            min="0.001"
+            step="0.001"
+            className="w-20 border border-gray-300 rounded-xl px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 text-center"
           />
-          <UnitToggle value={form.unit} onChange={u => setForm(prev => ({ ...prev, unit: u }))} />
+          {/* Kg: button to accumulate parcel */}
+          {form.unit === 'Kg' && (
+            <button
+              type="button"
+              onClick={addKgParcial}
+              title="Sumar peso"
+              className="bg-blue-500 text-white rounded-xl px-2.5 py-2 hover:bg-blue-600 transition-colors flex-shrink-0 font-bold text-sm"
+            >
+              +Kg
+            </button>
+          )}
+          <UnitToggle value={form.unit} onChange={u => { setForm(prev => ({ ...prev, unit: u, quantity: '' })); setKgParcials([]); }} />
           <input
             type="number"
             value={form.unitPrice}
@@ -306,6 +349,30 @@ export default function CostTracker() {
             <Plus size={18} />
           </button>
         </div>
+
+        {/* Kg accumulator chips */}
+        {form.unit === 'Kg' && kgParcials.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 items-center">
+            {kgParcials.map((v, i) => (
+              <span
+                key={i}
+                className="flex items-center gap-1 bg-blue-100 text-blue-800 text-xs font-medium px-2 py-1 rounded-full"
+              >
+                {v.toFixed(3)} Kg
+                <button
+                  type="button"
+                  onClick={() => removeKgParcial(i)}
+                  className="text-blue-500 hover:text-red-500 leading-none"
+                >
+                  ×
+                </button>
+              </span>
+            ))}
+            <span className="text-xs font-bold text-blue-700 ml-1">
+              = {(kgTotal + (parseFloat(form.quantity) > 0 ? parseFloat(form.quantity) : 0)).toFixed(3)} Kg
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Items list */}
