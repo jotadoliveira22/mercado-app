@@ -74,7 +74,7 @@ export default function CostTracker() {
   const kgTotal = kgParcials.reduce((s, v) => s + v, 0);
 
   const addKgParcial = () => {
-    const v = parseFloat(form.quantity);
+    const v = parseFloat(parseFloat(form.quantity).toFixed(3));
     if (isNaN(v) || v <= 0) return;
     setKgParcials(prev => [...prev, v]);
     setForm(prev => ({ ...prev, quantity: '' }));
@@ -89,8 +89,8 @@ export default function CostTracker() {
     const unitPrice = parseFloat(form.unitPrice);
     let quantity: number;
     if (form.unit === 'Kg') {
-      const inputVal = parseFloat(form.quantity);
-      const accumulated = kgTotal + (isNaN(inputVal) || inputVal <= 0 ? 0 : inputVal);
+      const inputVal = parseFloat(form.quantity) || 0;
+      const accumulated = parseFloat((kgTotal + (inputVal > 0 ? inputVal : 0)).toFixed(3));
       quantity = accumulated > 0 ? accumulated : 0;
     } else {
       quantity = parseFloat(form.quantity);
@@ -369,7 +369,7 @@ export default function CostTracker() {
               </span>
             ))}
             <span className="text-xs font-bold text-blue-700 ml-1">
-              = {(kgTotal + (parseFloat(form.quantity) > 0 ? parseFloat(form.quantity) : 0)).toFixed(3)} Kg
+              = {parseFloat((kgTotal + (parseFloat(form.quantity) > 0 ? parseFloat(form.quantity) : 0)).toFixed(3))} Kg
             </span>
           </div>
         )}
