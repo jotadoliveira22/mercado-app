@@ -7,6 +7,7 @@ export default function AuthScreen() {
   const [mode, setMode] = useState<Mode>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [name, setName] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [info, setInfo] = useState('');
@@ -15,12 +16,20 @@ export default function AuthScreen() {
     setError('');
     setInfo('');
     if (!email.trim() || !password.trim()) { setError('Completa todos los campos'); return; }
+    if (mode === 'register' && !name.trim()) { setError('Ingresa tu nombre'); return; }
     if (password.length < 6) { setError('La contraseña debe tener al menos 6 caracteres'); return; }
     setLoading(true);
     try {
       if (mode === 'register') {
         const redirectTo = `${window.location.origin}/`;
-        const { error: e } = await supabase.auth.signUp({ email: email.trim(), password, options: { emailRedirectTo: redirectTo } });
+        const { error: e } = await supabase.auth.signUp({
+          email: email.trim(),
+          password,
+          options: {
+            emailRedirectTo: redirectTo,
+            data: { display_name: name.trim(), full_name: name.trim() },
+          },
+        });
         if (e) { setError(e.message); }
         else { setInfo('Revisa tu correo para confirmar tu cuenta, luego inicia sesión.'); setMode('login'); }
       } else {
@@ -31,6 +40,8 @@ export default function AuthScreen() {
       setLoading(false);
     }
   };
+
+  const switchMode = (m: Mode) => { setMode(m); setError(''); setInfo(''); setName(''); };
 
   return (
     <div className="flex flex-col h-screen bg-[#f0fdf4] max-w-lg mx-auto">
@@ -63,6 +74,22 @@ export default function AuthScreen() {
         )}
 
         <div className="space-y-3">
+          {mode === 'register' && (
+            <div>
+              <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1 block">
+                Nombre
+              </label>
+              <input
+                type="text"
+                value={name}
+                onChange={e => setName(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handle()}
+                placeholder="Tu nombre completo"
+                autoComplete="name"
+                className="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+              />
+            </div>
+          )}
           <div>
             <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1 block">
               Correo electrónico
@@ -105,14 +132,14 @@ export default function AuthScreen() {
           {mode === 'login' ? (
             <p className="text-sm text-gray-500">
               ¿No tienes cuenta?{' '}
-              <button onClick={() => { setMode('register'); setError(''); setInfo(''); }} className="text-green-700 font-semibold">
+              <button onClick={() => switchMode('register')} className="text-green-700 font-semibold">
                 Regístrate
               </button>
             </p>
           ) : (
             <p className="text-sm text-gray-500">
               ¿Ya tienes cuenta?{' '}
-              <button onClick={() => { setMode('login'); setError(''); setInfo(''); }} className="text-green-700 font-semibold">
+              <button onClick={() => switchMode('login')} className="text-green-700 font-semibold">
                 Inicia sesión
               </button>
             </p>
