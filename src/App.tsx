@@ -24,7 +24,7 @@ export default function App() {
       <header className="bg-[#166534] flex-shrink-0 px-5 py-4 flex items-center gap-4 shadow-lg">
         <div className="bg-white rounded-2xl p-1.5 shadow-md flex-shrink-0">
           <img
-            src="/logo.png"
+            src="/Logo MarktPlan.PNG"
             alt="MarktPlan"
             className="h-12 w-12 object-contain"
           />
