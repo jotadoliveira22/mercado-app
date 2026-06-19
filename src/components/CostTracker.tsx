@@ -135,7 +135,7 @@ export default function CostTracker() {
       <div className="bg-green-700 px-4 py-4 shadow-md">
         <div className="flex items-center gap-2 mb-3">
           <DollarSign className="text-white" size={22} />
-          <h1 className="text-white font-bold text-xl">Calculadora de Mercado</h1>
+          <h1 className="text-white font-bold text-xl">Carrito de Compras</h1>
         </div>
 
         {/* Total row */}
