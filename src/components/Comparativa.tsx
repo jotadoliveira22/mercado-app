@@ -47,6 +47,8 @@ function newItem(): PropItem {
 function PropComparison() {
   const [items, setItems] = useState<PropItem[]>([newItem(), newItem()]);
   const [currency, setCurrency] = useState<'USD' | 'Bs'>('USD');
+  const [scanningId, setScanningId] = useState<string | null>(null);
+  const [loadingId, setLoadingId] = useState<string | null>(null);
 
   const update = (id: string, field: keyof PropItem, value: string) =>
     setItems(prev => prev.map(i => i.id === id ? { ...i, [field]: value } : i));
@@ -57,6 +59,14 @@ function PropComparison() {
 
   const removeItem = (id: string) => {
     if (items.length > 2) setItems(prev => prev.filter(i => i.id !== id));
+  };
+
+  const handleScan = async (id: string, code: string) => {
+    setScanningId(null);
+    setLoadingId(id);
+    const name = await lookupBarcode(code);
+    if (name) update(id, 'name', name);
+    setLoadingId(null);
   };
 
   // Calcular precio por unidad mínima
@@ -113,13 +123,23 @@ function PropComparison() {
               )}
             </div>
 
-            <input
-              type="text"
-              placeholder="Nombre del producto (opcional)"
-              value={item.name}
-              onChange={e => update(item.id, 'name', e.target.value)}
-              className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
-            />
+            <div className="flex gap-2">
+              <input
+                type="text"
+                placeholder={loadingId === item.id ? 'Buscando...' : 'Nombre del producto (opcional)'}
+                value={item.name}
+                onChange={e => update(item.id, 'name', e.target.value)}
+                disabled={loadingId === item.id}
+                className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+              />
+              <button
+                type="button"
+                onClick={() => setScanningId(item.id)}
+                className="bg-green-700 text-white rounded-xl px-3 py-2 hover:bg-green-600 transition-colors flex-shrink-0"
+              >
+                <Camera size={16} />
+              </button>
+            </div>
 
             <div className="flex gap-2">
               {/* Precio */}
@@ -171,6 +191,13 @@ function PropComparison() {
           className="w-full border-2 border-dashed border-gray-200 rounded-2xl py-3 text-sm text-gray-400 hover:border-green-400 hover:text-green-600 transition-colors flex items-center justify-center gap-2">
           <Plus size={16} /> Agregar tercer producto
         </button>
+      )}
+
+      {scanningId && (
+        <BarcodeScanner
+          onScan={code => handleScan(scanningId, code)}
+          onClose={() => setScanningId(null)}
+        />
       )}
     </div>
   );
