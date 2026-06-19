@@ -19,6 +19,7 @@ const COLORS = [
 ];
 
 function PieChart({ data }: { data: Array<{ label: string; value: number; color: string }> }) {
+  const [activeIdx, setActiveIdx] = useState<number | null>(null);
   const total = data.reduce((s, d) => s + d.value, 0);
   if (total === 0) return null;
 
@@ -35,34 +36,82 @@ function PieChart({ data }: { data: Array<{ label: string; value: number; color:
     return { x: 50 + r * Math.cos(rad), y: 50 + r * Math.sin(rad) };
   };
 
+  const active = activeIdx !== null ? slices[activeIdx] : null;
+
   return (
     <div className="flex flex-col items-center gap-4">
-      <svg viewBox="0 0 100 100" className="w-48 h-48">
-        {slices.map((s) => {
-          if (s.pct >= 0.999) {
-            return <circle key={s.i} cx="50" cy="50" r="40" fill={s.color} />;
-          }
-          const p1 = toXY(s.start, 40);
-          const p2 = toXY(s.end, 40);
-          const large = s.end - s.start > 180 ? 1 : 0;
-          return (
-            <path
-              key={s.i}
-              d={`M50,50 L${p1.x},${p1.y} A40,40 0 ${large},1 ${p2.x},${p2.y} Z`}
-              fill={s.color}
-              stroke="white"
-              strokeWidth="0.5"
-            />
-          );
-        })}
-      </svg>
+      <div className="relative">
+        <svg viewBox="0 0 100 100" className="w-52 h-52">
+          {slices.map((s) => {
+            const isActive = activeIdx === s.i;
+            const r = isActive ? 43 : 40;
+            if (s.pct >= 0.999) {
+              return (
+                <circle
+                  key={s.i}
+                  cx="50" cy="50" r={r}
+                  fill={s.color}
+                  style={{ cursor: 'pointer', transition: 'all 0.15s' }}
+                  onClick={() => setActiveIdx(isActive ? null : s.i)}
+                />
+              );
+            }
+            const p1 = toXY(s.start, r);
+            const p2 = toXY(s.end, r);
+            const large = s.end - s.start > 180 ? 1 : 0;
+            return (
+              <path
+                key={s.i}
+                d={`M50,50 L${p1.x},${p1.y} A${r},${r} 0 ${large},1 ${p2.x},${p2.y} Z`}
+                fill={s.color}
+                stroke="white"
+                strokeWidth={isActive ? 0.3 : 0.5}
+                style={{ cursor: 'pointer', transition: 'all 0.15s' }}
+                onClick={() => setActiveIdx(isActive ? null : s.i)}
+              />
+            );
+          })}
+          {/* Center label when active */}
+          {active && (
+            <>
+              <text x="50" y="47" textAnchor="middle" fontSize="6" fontWeight="bold" fill="#1f2937">
+                {(active.pct * 100).toFixed(0)}%
+              </text>
+              <text x="50" y="55" textAnchor="middle" fontSize="5" fill="#374151">
+                ${active.value.toFixed(2)}
+              </text>
+            </>
+          )}
+        </svg>
+      </div>
+
+      {/* Active slice detail card */}
+      {active && (
+        <div className="w-full bg-white border rounded-xl px-4 py-3 flex items-center gap-3 shadow-sm" style={{ borderColor: active.color }}>
+          <div className="w-4 h-4 rounded-full flex-shrink-0" style={{ background: active.color }} />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-gray-800 truncate">
+              {CATEGORY_ICONS[active.label] ?? ''} {active.label}
+            </p>
+          </div>
+          <div className="text-right flex-shrink-0">
+            <p className="text-sm font-bold text-green-700">${active.value.toFixed(2)}</p>
+            <p className="text-xs text-gray-400">{(active.pct * 100).toFixed(1)}%</p>
+          </div>
+        </div>
+      )}
+
       <div className="w-full grid grid-cols-2 gap-x-4 gap-y-1.5">
         {slices.map(s => (
-          <div key={s.i} className="flex items-center gap-1.5 min-w-0">
+          <button
+            key={s.i}
+            onClick={() => setActiveIdx(activeIdx === s.i ? null : s.i)}
+            className={`flex items-center gap-1.5 min-w-0 text-left rounded-lg px-1 py-0.5 transition-colors ${activeIdx === s.i ? 'bg-gray-100' : ''}`}
+          >
             <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: s.color }} />
             <span className="text-xs text-gray-600 truncate">{CATEGORY_ICONS[s.label] ?? ''} {s.label}</span>
             <span className="text-xs font-semibold text-gray-800 ml-auto flex-shrink-0">{(s.pct * 100).toFixed(0)}%</span>
-          </div>
+          </button>
         ))}
       </div>
     </div>
@@ -108,9 +157,9 @@ function PurchaseDetail({ purchase, onClose }: { purchase: SavedPurchase; onClos
               </p>
             </div>
             <div className="bg-green-50 rounded-xl p-2 text-center">
-              <p className="text-xs text-gray-500">Binance</p>
+              <p className="text-xs text-gray-500">USDT</p>
               <p className="font-bold text-green-700 text-sm">
-                {purchase.totalBinance ? `Bs ${purchase.totalBinance.toLocaleString('es-VE', { maximumFractionDigits: 0 })}` : '—'}
+                {purchase.totalBinance ? `${purchase.totalBinance.toFixed(2)} $` : '—'}
               </p>
             </div>
           </div>
