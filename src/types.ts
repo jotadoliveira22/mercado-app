@@ -51,6 +51,7 @@ export interface SavedPurchase {
   totalUSD: number;
   totalBCV: number | null;
   totalBinance: number | null;
+  store?: string | null;
 }
 
 export interface ExchangeRates {

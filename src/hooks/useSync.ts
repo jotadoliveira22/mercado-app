@@ -105,6 +105,7 @@ export async function fetchSavedPurchases(): Promise<SavedPurchase[] | null> {
     totalUSD: r.total_usd,
     totalBCV: r.total_bcv,
     totalBinance: r.total_usdt,
+    store: r.store ?? null,
   }));
 }
 
@@ -121,7 +122,24 @@ export async function pushSavedPurchases(purchases: SavedPurchase[]) {
     total_usd: p.totalUSD,
     total_bcv: p.totalBCV,
     total_usdt: p.totalBinance,
+    store: p.store ?? null,
   }));
   const { error } = await supabase.from('saved_purchases').insert(rows);
   if (error) console.error('push saved_purchases:', error);
+}
+
+// ── Store Prices (Comparativa) ───────────────────────────────────────────────
+
+export async function pushPricesToComparative(items: TrackerItem[], store: string) {
+  if (!store || items.length === 0) return;
+  const rows = items.map(i => ({
+    barcode: i.barcode || `name:${i.name.toLowerCase().trim()}`,
+    product_name: i.name,
+    store,
+    price_usd: i.unitPrice,
+  }));
+  const { error } = await supabase
+    .from('store_prices')
+    .upsert(rows, { onConflict: 'barcode,store' });
+  if (error) console.error('push store_prices:', error);
 }

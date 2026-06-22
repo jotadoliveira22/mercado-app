@@ -138,6 +138,7 @@ function PurchaseDetail({ purchase, onClose }: { purchase: SavedPurchase; onClos
         <div className="bg-green-700 px-4 py-3 rounded-t-3xl flex items-center justify-between flex-shrink-0">
           <div>
             <p className="text-white font-bold text-base capitalize">{fmt.format(date)}</p>
+            {purchase.store && <p className="text-green-300 text-xs font-medium">{purchase.store}</p>}
             <p className="text-green-200 text-sm">${purchase.totalUSD.toFixed(2)} USD</p>
           </div>
           <button onClick={onClose} className="text-white"><X size={22} /></button>
@@ -343,7 +344,7 @@ export default function Reports({ savedPurchases: purchases }: Props) {
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm font-semibold text-gray-800 capitalize">{dateStr}</p>
-                    <p className="text-xs text-gray-400">{timeStr} · {p.items.length} productos</p>
+                    <p className="text-xs text-gray-400">{timeStr} · {p.items.length} productos{p.store ? ` · ${p.store}` : ''}</p>
                   </div>
                   <div className="text-right">
                     <p className="font-bold text-green-700">${p.totalUSD.toFixed(2)}</p>
