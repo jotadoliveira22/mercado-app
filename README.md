@@ -71,3 +71,37 @@ export default defineConfig([
   },
 ])
 ```
+
+## Backup de datos (Supabase → CSV)
+
+Exporta las tablas de Supabase a CSV y JSON en `backups/<fecha>/`:
+
+```bash
+cp .env.example .env    # y rellena tus credenciales
+npm run backup
+```
+
+Tablas exportadas: `shopping_items`, `tracker_items`, `saved_purchases`, `store_prices`.
+
+Por defecto exporta solo **tus** datos (inicia sesión con tu correo y respeta las
+políticas RLS). Para exportar los de todos los usuarios, define
+`SUPABASE_SERVICE_ROLE_KEY` en el `.env`.
+
+El script no tiene dependencias — usa la API REST de Supabase y el `fetch` nativo
+de Node 18+, así que funciona aunque `node_modules` no esté instalado.
+
+La carpeta `backups/` y el archivo `.env` están en `.gitignore`.
+
+## Seguridad de la base de datos (RLS)
+
+Las políticas de Row Level Security están en `db/rls_policies.sql`. Para
+aplicarlas: Supabase → SQL Editor → New query → pegar el archivo → Run.
+Es idempotente, se puede correr varias veces.
+
+- `shopping_items`, `tracker_items`, `saved_purchases`: privadas por usuario.
+- `store_prices`: comparativa compartida. Los usuarios autenticados leen y
+  aportan precios; los anónimos no tienen acceso. Cada precio guarda quién lo
+  aportó en `contributed_by`.
+
+Al final del archivo hay una consulta de verificación para confirmar que RLS
+quedó activo en las cuatro tablas.

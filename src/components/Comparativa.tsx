@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Plus, Trash2, Check, Camera, Store, Scale } from 'lucide-react';
 import BarcodeScanner from './BarcodeScanner';
 import { lookupBarcode } from '../utils/lookupBarcode';
+import { supabase } from '../lib/supabase';
 
 // ─── Tipos ──────────────────────────────────────────────────────────────────
 
@@ -21,10 +22,6 @@ const STORES = [
   'Unicasa', 'Rio Vida', 'Supermercados RIO', 'Farmatodo',
   'Supermercado Forum', 'Supermercado Luz', 'Supermercado Páramo',
 ];
-
-const SUPABASE_URL = 'https://sjhvwraukqaebewytmln.supabase.co';
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNqaHZ3cmF1a3FhZWJld3l0bWxuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE4MDkxMDksImV4cCI6MjA5NzM4NTEwOX0.kEYjPlnlOoNy70GmRaJic7-FhMxuCb3jFidx1aKebhU';
-const SB_HEADERS = { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}`, 'Content-Type': 'application/json' };
 
 // Normaliza todo a gramos o mililitros para comparar
 function toBaseUnit(size: number, unit: SizeUnit): number {
@@ -236,11 +233,13 @@ function PriceComparison() {
   const fetchPrices = async (code: string) => {
     setLoadingPrices(true);
     try {
-      const res = await fetch(
-        `${SUPABASE_URL}/rest/v1/store_prices?barcode=eq.${encodeURIComponent(code)}&order=price_usd.asc&select=store,price_usd,recorded_at`,
-        { headers: SB_HEADERS }
-      );
-      if (res.ok) setPrices(await res.json());
+      // El cliente adjunta el JWT de la sesión, así RLS ve al usuario real.
+      const { data, error } = await supabase
+        .from('store_prices')
+        .select('store,price_usd,recorded_at')
+        .eq('barcode', code)
+        .order('price_usd', { ascending: true });
+      if (!error && data) setPrices(data);
     } catch { /* sin red */ }
     setLoadingPrices(false);
   };
@@ -250,11 +249,13 @@ function PriceComparison() {
     if (!barcode || isNaN(price) || price <= 0) return;
     setSaving(true);
     try {
-      await fetch(`${SUPABASE_URL}/rest/v1/store_prices`, {
-        method: 'POST',
-        headers: { ...SB_HEADERS, 'Prefer': 'resolution=merge-duplicates' },
-        body: JSON.stringify({ barcode, product_name: productName, store: selectedStore, price_usd: price }),
-      });
+      const { error } = await supabase
+        .from('store_prices')
+        .upsert(
+          { barcode, product_name: productName, store: selectedStore, price_usd: price },
+          { onConflict: 'barcode,store' }
+        );
+      if (error) throw error;
       setNewPrice('');
       setSavedOk(true);
       setTimeout(() => setSavedOk(false), 2000);

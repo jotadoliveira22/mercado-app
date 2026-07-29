@@ -13,6 +13,12 @@ dist-ssr
 *.local
 package-lock.json
 
+# Credenciales y backups locales de datos
+.env
+.env.*
+!.env.example
+backups/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
