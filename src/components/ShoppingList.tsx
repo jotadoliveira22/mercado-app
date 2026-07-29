@@ -1,14 +1,19 @@
-import { useState, useMemo, useCallback } from 'react';
-import { Plus, Trash2, ChevronDown, ChevronRight, ShoppingCart, ScanLine } from 'lucide-react';
+import { useState, useMemo, useCallback, useRef } from 'react';
+import { Plus, Trash2, ChevronDown, ChevronRight, ShoppingCart, ScanLine, ShoppingBag, Loader } from 'lucide-react';
 import type { ShoppingItem, Category, Unit } from '../types';
 import { categorizeProduct } from '../utils/categorize';
 import { lookupBarcode } from '../utils/lookupBarcode';
+import { priceKeyCandidates } from '../utils/priceKey';
+import { fetchStorePrices } from '../hooks/useSync';
 import BarcodeScanner from './BarcodeScanner';
 import NewProductModal from './NewProductModal';
+import StoreSelect from './StoreSelect';
 
 interface Props {
   items: ShoppingItem[];
   setItems: (val: ShoppingItem[] | ((prev: ShoppingItem[]) => ShoppingItem[])) => void;
+  /** Pasa la lista al carrito con los precios ya resueltos. */
+  onMigrateToCart: (items: ShoppingItem[], prices: Map<string, number>) => void;
 }
 
 const ALL_CATEGORIES: Category[] = [
@@ -45,7 +50,7 @@ const CATEGORY_ICONS: Record<Category, string> = {
   'Otros': '🛒',
 };
 
-export default function ShoppingList({ items, setItems }: Props) {
+export default function ShoppingList({ items, setItems, onMigrateToCart }: Props) {
   const [input, setInput] = useState('');
   const [quantity, setQuantity] = useState('1');
   const [unit, setUnit] = useState<Unit>('Und');
@@ -53,6 +58,50 @@ export default function ShoppingList({ items, setItems }: Props) {
   const [showScanner, setShowScanner] = useState(false);
   const [loadingProduct, setLoadingProduct] = useState(false);
   const [unknownBarcode, setUnknownBarcode] = useState<string | null>(null);
+  // Código del último escaneo, para guardarlo junto al producto.
+  const [scannedBarcode, setScannedBarcode] = useState<string | undefined>(undefined);
+
+  const [store, setStore] = useState('');
+  const [prices, setPrices] = useState<Map<string, number>>(new Map());
+  const [loadingPrices, setLoadingPrices] = useState(false);
+  // Descarta respuestas de un establecimiento que ya no está seleccionado.
+  const priceRequest = useRef(0);
+
+  const changeStore = useCallback(async (next: string) => {
+    const request = ++priceRequest.current;
+    setStore(next);
+    setPrices(new Map());
+    if (!next) return;
+    setLoadingPrices(true);
+    const result = await fetchStorePrices(next);
+    if (priceRequest.current !== request) return; // llegó tarde, ya hay otro
+    setPrices(result ?? new Map());
+    setLoadingPrices(false);
+  }, []);
+
+  /** Precio unitario del producto en el establecimiento, o null si no está registrado. */
+  const priceOf = useCallback((item: ShoppingItem): number | null => {
+    if (prices.size === 0) return null;
+    for (const key of priceKeyCandidates(item)) {
+      const found = prices.get(key);
+      if (found !== undefined) return found;
+    }
+    return null;
+  }, [prices]);
+
+  // Total estimado: solo suma lo que sí tiene precio, y cuenta lo que falta
+  // para no presentar un total parcial como si fuera completo.
+  const estimate = useMemo(() => {
+    let total = 0;
+    let withPrice = 0;
+    for (const item of items) {
+      const price = priceOf(item);
+      if (price === null) continue;
+      total += price * (item.quantity ?? 1);
+      withPrice++;
+    }
+    return { total, withPrice, missing: items.length - withPrice };
+  }, [items, priceOf]);
 
   const groupedItems = useMemo(() => {
     const groups: Partial<Record<Category, ShoppingItem[]>> = {};
@@ -77,10 +126,12 @@ export default function ShoppingList({ items, setItems }: Props) {
       createdAt: Date.now(),
       quantity: parseFloat(quantity) || 1,
       unit,
+      barcode: scannedBarcode,
     };
     setItems(prev => [...prev, newItem]);
     setInput('');
     setQuantity('1');
+    setScannedBarcode(undefined);
   };
 
   const handleScan = useCallback(async (barcode: string) => {
@@ -88,12 +139,19 @@ export default function ShoppingList({ items, setItems }: Props) {
     setLoadingProduct(true);
     const name = await lookupBarcode(barcode);
     setLoadingProduct(false);
+    // Se conserva el código: es lo que permite cruzar el precio de forma exacta.
+    setScannedBarcode(barcode);
     if (name) {
       setInput(name);
     } else {
       setUnknownBarcode(barcode);
     }
   }, []);
+
+  const migrateToCart = () => {
+    if (items.length === 0) return;
+    onMigrateToCart(items, prices);
+  };
 
   const toggleItem = (id: string) => {
     setItems(prev => prev.map(i => i.id === id ? { ...i, checked: !i.checked } : i));
@@ -130,7 +188,7 @@ export default function ShoppingList({ items, setItems }: Props) {
       )}
 
       {/* Subheader */}
-      <div className="bg-[#14532d] px-4 pt-3 pb-4">
+      <div className="bg-[#14532d] px-4 pt-3 pb-4 space-y-3">
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-white font-bold text-lg">Lista de Compras</h2>
@@ -153,6 +211,30 @@ export default function ShoppingList({ items, setItems }: Props) {
             </div>
           )}
         </div>
+
+        {/* Establecimiento: al elegirlo aparecen los precios de la base de datos */}
+        <StoreSelect value={store} onChange={changeStore} />
+
+        {store && items.length > 0 && (
+          <div className="bg-green-800 bg-opacity-40 rounded-xl px-4 py-3">
+            <div className="flex items-baseline justify-between">
+              <span className="text-green-200 text-xs font-medium">Total estimado</span>
+              {loadingPrices ? (
+                <Loader size={14} className="animate-spin text-green-300" />
+              ) : (
+                <span className="text-white font-extrabold text-xl">
+                  ${estimate.total.toFixed(2)}
+                </span>
+              )}
+            </div>
+            {!loadingPrices && estimate.missing > 0 && (
+              <p className="text-yellow-300 text-[11px] mt-1 leading-snug">
+                {estimate.missing} de {items.length} {estimate.missing === 1 ? 'producto' : 'productos'} sin
+                precio registrado en este establecimiento. El total es parcial.
+              </p>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Add item */}
@@ -161,7 +243,12 @@ export default function ShoppingList({ items, setItems }: Props) {
           <input
             type="text"
             value={loadingProduct ? 'Buscando producto...' : input}
-            onChange={e => setInput(e.target.value)}
+            onChange={e => {
+              setInput(e.target.value);
+              // Editar el nombre a mano desliga el código escaneado: pegarlo a
+              // otro producto ensuciaría los precios compartidos.
+              setScannedBarcode(undefined);
+            }}
             onKeyDown={e => e.key === 'Enter' && addItem()}
             placeholder="Agregar producto..."
             disabled={loadingProduct}
@@ -239,7 +326,9 @@ export default function ShoppingList({ items, setItems }: Props) {
                   </button>
                   {!isCollapsed && (
                     <ul>
-                      {catItems.map((item, idx) => (
+                      {catItems.map((item, idx) => {
+                        const unitPrice = priceOf(item);
+                        return (
                         <li
                           key={item.id}
                           className={`flex items-center gap-3 px-4 py-3 ${idx < catItems.length - 1 ? 'border-b border-gray-50' : ''}`}
@@ -264,6 +353,19 @@ export default function ShoppingList({ items, setItems }: Props) {
                               </span>
                             )}
                           </span>
+                          {/* Precio del establecimiento. Si no está en la base
+                              de datos se deja en blanco, nunca estimado. */}
+                          {store && (
+                            <span className="text-right flex-shrink-0 min-w-[52px]">
+                              {unitPrice === null ? (
+                                <span className="text-gray-300 text-xs">—</span>
+                              ) : (
+                                <span className={`text-sm font-bold ${item.checked ? 'text-gray-400' : 'text-green-700'}`}>
+                                  ${(unitPrice * (item.quantity ?? 1)).toFixed(2)}
+                                </span>
+                              )}
+                            </span>
+                          )}
                           <button
                             onClick={() => deleteItem(item.id)}
                             className="text-gray-300 hover:text-red-400 transition-colors"
@@ -271,7 +373,8 @@ export default function ShoppingList({ items, setItems }: Props) {
                             <Trash2 size={16} />
                           </button>
                         </li>
-                      ))}
+                        );
+                      })}
                     </ul>
                   )}
                 </div>
@@ -288,6 +391,22 @@ export default function ShoppingList({ items, setItems }: Props) {
           </>
         )}
       </div>
+
+      {/* Continuar a carrito */}
+      {items.length > 0 && (
+        <div className="flex-shrink-0 px-4 py-3 bg-white border-t border-gray-100">
+          <button
+            onClick={migrateToCart}
+            className="w-full bg-green-700 hover:bg-green-600 active:bg-green-800 text-white font-bold rounded-xl py-3 flex items-center justify-center gap-2 transition-colors"
+          >
+            <ShoppingBag size={18} />
+            Continuar a carrito
+          </button>
+          <p className="text-center text-[11px] text-gray-400 mt-1.5">
+            Pasa {items.length} {items.length === 1 ? 'producto' : 'productos'} al carrito y vacía la lista
+          </p>
+        </div>
+      )}
     </div>
   );
 }

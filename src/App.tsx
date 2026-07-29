@@ -11,6 +11,7 @@ import {
   fetchTrackerItems, pushTrackerItems,
   fetchSavedPurchases, pushSavedPurchases,
 } from './hooks/useSync';
+import { priceKeyCandidates } from './utils/priceKey';
 import type { ShoppingItem, TrackerItem, SavedPurchase } from './types';
 import type { User } from '@supabase/supabase-js';
 
@@ -111,6 +112,32 @@ export default function App() {
     });
   }, []);
 
+  // Lista → Carrito: agrega al final de lo que ya haya y vacía la lista.
+  // Los productos sin precio registrado entran en 0 para que el usuario los
+  // complete; nunca se estima un precio.
+  const migrateListToCart = useCallback((list: ShoppingItem[], prices: Map<string, number>) => {
+    if (list.length === 0) return;
+    const migrated: TrackerItem[] = list.map(item => {
+      let unitPrice = 0;
+      for (const key of priceKeyCandidates(item)) {
+        const found = prices.get(key);
+        if (found !== undefined) { unitPrice = found; break; }
+      }
+      return {
+        id: crypto.randomUUID(),
+        name: item.name,
+        quantity: item.quantity ?? 1,
+        unitPrice,
+        unit: item.unit ?? 'Und',
+        category: item.category,
+        barcode: item.barcode,
+      };
+    });
+    setTrackerItems(prev => [...prev, ...migrated]);
+    setShoppingItems([]);
+    setActiveTab('cart');
+  }, [setTrackerItems, setShoppingItems]);
+
   const logout = async () => {
     await supabase.auth.signOut();
     localStorage.removeItem('shopping-items');
@@ -167,7 +194,13 @@ export default function App() {
 
       {/* Content */}
       <div className="flex-1 overflow-hidden">
-        {activeTab === 'list' && <ShoppingList items={shoppingItems} setItems={setShoppingItems} />}
+        {activeTab === 'list' && (
+          <ShoppingList
+            items={shoppingItems}
+            setItems={setShoppingItems}
+            onMigrateToCart={migrateListToCart}
+          />
+        )}
         {activeTab === 'cart' && (
           <CostTracker
             trackerItems={trackerItems}
