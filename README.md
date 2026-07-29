@@ -91,3 +91,17 @@ El script no tiene dependencias — usa la API REST de Supabase y el `fetch` nat
 de Node 18+, así que funciona aunque `node_modules` no esté instalado.
 
 La carpeta `backups/` y el archivo `.env` están en `.gitignore`.
+
+## Seguridad de la base de datos (RLS)
+
+Las políticas de Row Level Security están en `db/rls_policies.sql`. Para
+aplicarlas: Supabase → SQL Editor → New query → pegar el archivo → Run.
+Es idempotente, se puede correr varias veces.
+
+- `shopping_items`, `tracker_items`, `saved_purchases`: privadas por usuario.
+- `store_prices`: comparativa compartida. Los usuarios autenticados leen y
+  aportan precios; los anónimos no tienen acceso. Cada precio guarda quién lo
+  aportó en `contributed_by`.
+
+Al final del archivo hay una consulta de verificación para confirmar que RLS
+quedó activo en las cuatro tablas.
