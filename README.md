@@ -71,3 +71,23 @@ export default defineConfig([
   },
 ])
 ```
+
+## Backup de datos (Supabase → CSV)
+
+Exporta las tablas de Supabase a CSV y JSON en `backups/<fecha>/`:
+
+```bash
+cp .env.example .env    # y rellena tus credenciales
+npm run backup
+```
+
+Tablas exportadas: `shopping_items`, `tracker_items`, `saved_purchases`, `store_prices`.
+
+Por defecto exporta solo **tus** datos (inicia sesión con tu correo y respeta las
+políticas RLS). Para exportar los de todos los usuarios, define
+`SUPABASE_SERVICE_ROLE_KEY` en el `.env`.
+
+El script no tiene dependencias — usa la API REST de Supabase y el `fetch` nativo
+de Node 18+, así que funciona aunque `node_modules` no esté instalado.
+
+La carpeta `backups/` y el archivo `.env` están en `.gitignore`.
