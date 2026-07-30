@@ -1,8 +1,9 @@
-import { useState } from 'react';
-import { Plus, Trash2, Check, Camera, Store, Scale } from 'lucide-react';
+import { useState, useRef } from 'react';
+import { Plus, Trash2, Check, Camera, Store, Scale, Search } from 'lucide-react';
 import BarcodeScanner from './BarcodeScanner';
 import { lookupBarcode } from '../utils/lookupBarcode';
 import { supabase } from '../lib/supabase';
+import { buscarPrecios, type HitPrecio } from '../hooks/useSync';
 import { STORES } from '../constants/stores';
 import StoreSelect from './StoreSelect';
 
@@ -211,6 +212,12 @@ function PriceComparison() {
   const [loadingLookup, setLoadingLookup] = useState(false);
   const [prices, setPrices] = useState<StorePrice[]>([]);
   const [loadingPrices, setLoadingPrices] = useState(false);
+
+  // Búsqueda por texto sobre el catálogo + los aportes de la comunidad.
+  const [query, setQuery] = useState('');
+  const [hits, setHits] = useState<HitPrecio[] | null>(null);
+  const [buscando, setBuscando] = useState(false);
+  const busqueda = useRef(0);
   const [selectedStore, setSelectedStore] = useState(STORES[0]);
   const [newPrice, setNewPrice] = useState('');
   const [saving, setSaving] = useState(false);
@@ -260,14 +267,107 @@ function PriceComparison() {
     setSaving(false);
   };
 
+  const buscarTexto = async () => {
+    const texto = query.trim();
+    if (texto.length < 3) return;
+    const id = ++busqueda.current;
+    setBuscando(true);
+    try {
+      const res = await buscarPrecios(texto);
+      if (busqueda.current !== id) return; // llegó tarde, ya hay otra búsqueda
+      setHits(res);
+    } catch {
+      if (busqueda.current === id) setHits([]);
+    } finally {
+      if (busqueda.current === id) setBuscando(false);
+    }
+  };
+
+  const minHit = hits && hits.length > 0 ? hits[0].precioUsd : null;
+
   const minPrice = prices.length > 0 ? Math.min(...prices.map(p => p.price_usd)) : null;
 
   return (
     <div className="space-y-4">
       <p className="text-xs text-gray-500 px-1">
-        Escanea un producto y consulta o registra su precio en distintos establecimientos.
-        Los precios son aportados por la comunidad.
+        Busca un producto por nombre para comparar su precio entre establecimientos,
+        o escanea su código para consultar y registrar precios.
       </p>
+
+      {/* Búsqueda por nombre en el catálogo */}
+      <div className="space-y-2">
+        <div className="flex gap-2">
+          <div className="flex-1 relative">
+            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Buscar producto por nombre..."
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && buscarTexto()}
+              className="w-full border border-gray-200 rounded-xl pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+            />
+          </div>
+          <button
+            onClick={buscarTexto}
+            disabled={query.trim().length < 3 || buscando}
+            className="bg-green-700 text-white rounded-xl px-4 py-2 text-sm font-semibold hover:bg-green-600 disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            {buscando ? '...' : 'Buscar'}
+          </button>
+        </div>
+
+        {buscando && <p className="text-xs text-gray-400 text-center py-2">Buscando precios...</p>}
+
+        {!buscando && hits !== null && hits.length === 0 && (
+          <p className="text-xs text-gray-400 text-center py-3">
+            Sin resultados para «{query.trim()}». Prueba con menos palabras, por ejemplo
+            solo la marca.
+          </p>
+        )}
+
+        {!buscando && hits !== null && hits.length > 0 && (
+          <div className="space-y-1.5">
+            <p className="text-xs text-gray-500 px-1">
+              {hits.length} {hits.length === 1 ? 'precio' : 'precios'} · del más barato al más caro
+            </p>
+            {hits.map((h, i) => (
+              <div
+                key={`${h.origen}-${h.establecimiento}-${h.nombre}-${i}`}
+                className={`rounded-xl px-3 py-2.5 border flex items-start gap-2 ${
+                  h.precioUsd === minHit ? 'border-green-500 bg-green-50' : 'border-gray-100 bg-white'
+                }`}
+              >
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm text-gray-800 leading-snug">{h.nombre}</p>
+                  <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                    <span className="text-xs font-semibold text-green-700">{h.establecimiento}</span>
+                    {/* De dónde viene el dato: el catálogo se extrajo del sitio
+                        del supermercado; «comunidad» lo aportó un usuario. */}
+                    <span
+                      className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
+                        h.origen === 'catalogo'
+                          ? 'bg-blue-50 text-blue-700'
+                          : 'bg-amber-50 text-amber-700'
+                      }`}
+                    >
+                      {h.origen === 'catalogo' ? 'Catálogo' : 'Comunidad'}
+                    </span>
+                    {h.presentacion && (
+                      <span className="text-[10px] text-gray-400">{h.presentacion}</span>
+                    )}
+                  </div>
+                </div>
+                <span className="text-sm font-bold text-gray-800 flex-shrink-0">
+                  ${h.precioUsd.toFixed(2)}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="border-t border-gray-100 pt-3" />
 
       {/* Escanear */}
       <button
