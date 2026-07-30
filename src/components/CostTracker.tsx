@@ -1,14 +1,8 @@
 import { useState, useCallback, useRef } from 'react';
-import { Plus, Trash2, Edit2, Check, X, RefreshCw, Camera, DollarSign, AlertCircle, CreditCard, Save, ChevronDown } from 'lucide-react';
+import { Plus, Trash2, Edit2, Check, X, RefreshCw, Camera, DollarSign, AlertCircle, CreditCard, Save } from 'lucide-react';
 import type { TrackerItem, ExchangeRates, Unit, SavedPurchase } from '../types';
 import { useExchangeRates } from '../hooks/useExchangeRates';
 import { pushPricesToComparative } from '../hooks/useSync';
-
-const STORES = [
-  'Supermercado Gama', 'Supermercado El Plaza', 'Central Madeirense',
-  'Unicasa', 'Rio Vida', 'Supermercados RIO', 'Farmatodo',
-  'Supermercado Forum', 'Supermercado Luz', 'Supermercado Páramo',
-];
 
 interface Props {
   trackerItems: TrackerItem[];
@@ -20,6 +14,7 @@ import { lookupBarcode } from '../utils/lookupBarcode';
 import { categorizeProduct } from '../utils/categorize';
 import BarcodeScanner from './BarcodeScanner';
 import NewProductModal from './NewProductModal';
+import StoreSelect from './StoreSelect';
 
 type CasheaRate = 20 | 40;
 
@@ -59,11 +54,15 @@ export default function CostTracker({ trackerItems: items, setTrackerItems: setI
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({ name: '', quantity: '1', unitPrice: '', unit: 'Und' as Unit });
   const [loadingProduct, setLoadingProduct] = useState(false);
+  // Código del último escaneo, para guardarlo junto al producto.
+  const [scannedBarcode, setScannedBarcode] = useState<string | undefined>(undefined);
   // Kg weight accumulator
   const [kgParcials, setKgParcials] = useState<number[]>([]);
   const kgInputRef = useRef<HTMLInputElement>(null);
 
   const totalUSD = items.reduce((sum, i) => sum + i.quantity * i.unitPrice, 0);
+  // Productos traídos de la Lista sin precio registrado, pendientes de completar.
+  const missingPriceCount = items.filter(i => !(i.unitPrice > 0)).length;
   const totalBs = rates.bcv ? totalUSD * rates.bcv : null;
   // USDT = Bs BCV ÷ tasa USDT (dólar paralelo)
   const totalUSDT = totalBs && rates.usdt ? totalBs / rates.usdt : null;
@@ -76,6 +75,8 @@ export default function CostTracker({ trackerItems: items, setTrackerItems: setI
     setLoadingProduct(true);
     const name = await lookupBarcode(barcode);
     setLoadingProduct(false);
+    // Se conserva el código: es lo que hace exacto el cruce de precios.
+    setScannedBarcode(barcode);
     if (name) {
       setForm(prev => ({ ...prev, name }));
     } else {
@@ -111,9 +112,11 @@ export default function CostTracker({ trackerItems: items, setTrackerItems: setI
     setItems(prev => [...prev, {
       id: crypto.randomUUID(), name, quantity, unitPrice,
       unit: form.unit, category: categorizeProduct(name),
+      barcode: scannedBarcode,
     }]);
     setForm({ name: '', quantity: '', unitPrice: '', unit: form.unit });
     setKgParcials([]);
+    setScannedBarcode(undefined);
   };
 
   const savePurchase = () => {
@@ -181,18 +184,8 @@ export default function CostTracker({ trackerItems: items, setTrackerItems: setI
       <div className="bg-[#14532d] px-4 pt-3 pb-4 space-y-3">
         <h2 className="text-white font-bold text-lg">Carrito de Compras</h2>
 
-        {/* Selector de supermercado */}
-        <div className="relative">
-          <select
-            value={selectedStore}
-            onChange={e => setSelectedStore(e.target.value)}
-            className={`w-full bg-green-800 bg-opacity-60 border rounded-xl px-4 py-2.5 text-sm font-semibold appearance-none focus:outline-none focus:ring-2 focus:ring-green-400 ${selectedStore ? 'border-green-600 text-white' : 'border-yellow-400 text-green-300'}`}
-          >
-            <option value="" disabled className="text-gray-400 bg-white">Selecciona el Super Mercado</option>
-            {STORES.map(s => <option key={s} value={s} className="text-gray-800 bg-white">{s}</option>)}
-          </select>
-          <ChevronDown size={15} className="absolute right-3 top-1/2 -translate-y-1/2 text-green-300 pointer-events-none" />
-        </div>
+        {/* Selector de establecimiento */}
+        <StoreSelect value={selectedStore} onChange={setSelectedStore} />
 
         {/* Total cards */}
         <div className="grid grid-cols-3 gap-2">
@@ -312,7 +305,12 @@ export default function CostTracker({ trackerItems: items, setTrackerItems: setI
           <input
             type="text"
             value={loadingProduct ? 'Buscando producto...' : form.name}
-            onChange={e => setForm(prev => ({ ...prev, name: e.target.value }))}
+            onChange={e => {
+              setForm(prev => ({ ...prev, name: e.target.value }));
+              // Editar el nombre a mano desliga el código escaneado: pegarlo a
+              // otro producto ensuciaría los precios compartidos.
+              setScannedBarcode(undefined);
+            }}
             onKeyDown={e => e.key === 'Enter' && addItem()}
             placeholder="Nombre del producto"
             disabled={loadingProduct}
@@ -409,7 +407,14 @@ export default function CostTracker({ trackerItems: items, setTrackerItems: setI
           </div>
         ) : (
           items.map(item => (
-            <div key={item.id} className="bg-white rounded-2xl shadow-sm border border-gray-100 px-4 py-3">
+            // Precio en 0 se resalta: normalmente viene de la Lista sin precio
+            // registrado y hay que completarlo antes de guardar la compra.
+            <div
+              key={item.id}
+              className={`bg-white rounded-2xl shadow-sm px-4 py-3 border ${
+                item.unitPrice === 0 ? 'border-yellow-400 bg-yellow-50' : 'border-gray-100'
+              }`}
+            >
               {editingId === item.id ? (
                 <div className="space-y-2">
                   <input
@@ -440,9 +445,18 @@ export default function CostTracker({ trackerItems: items, setTrackerItems: setI
                 <div className="flex items-center gap-3">
                   <div className="flex-1 min-w-0">
                     <p className="font-medium text-gray-800 text-sm truncate">{item.name}</p>
-                    <p className="text-xs text-gray-500">
-                      {item.quantity} {item.unit ?? 'Und'} × ${item.unitPrice.toFixed(2)}
-                    </p>
+                    {item.unitPrice === 0 ? (
+                      <button
+                        onClick={() => startEdit(item)}
+                        className="text-xs text-yellow-700 font-semibold underline"
+                      >
+                        {item.quantity} {item.unit ?? 'Und'} · Falta el precio
+                      </button>
+                    ) : (
+                      <p className="text-xs text-gray-500">
+                        {item.quantity} {item.unit ?? 'Und'} × ${item.unitPrice.toFixed(2)}
+                      </p>
+                    )}
                   </div>
                   <div className="text-right flex-shrink-0">
                     <p className="font-bold text-green-700 text-sm">${(item.quantity * item.unitPrice).toFixed(2)}</p>
@@ -466,7 +480,13 @@ export default function CostTracker({ trackerItems: items, setTrackerItems: setI
         <div className="px-4 pb-4 pt-3 bg-white border-t border-gray-100 space-y-2">
           {!selectedStore && (
             <p className="text-xs text-yellow-600 font-medium text-center">
-              Selecciona el supermercado antes de guardar
+              Selecciona el establecimiento antes de guardar
+            </p>
+          )}
+          {missingPriceCount > 0 && (
+            <p className="text-xs text-yellow-600 font-medium text-center">
+              {missingPriceCount} {missingPriceCount === 1 ? 'producto' : 'productos'} sin precio.
+              No {missingPriceCount === 1 ? 'se sumará' : 'se sumarán'} al total ni a la comparativa.
             </p>
           )}
           <button

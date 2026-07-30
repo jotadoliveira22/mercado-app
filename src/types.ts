@@ -32,6 +32,8 @@ export interface ShoppingItem {
   createdAt: number;
   quantity: number;
   unit: Unit;
+  /** Se guarda al escanear para que el precio cruce por código y no por nombre. */
+  barcode?: string;
 }
 
 export interface TrackerItem {

@@ -3,6 +3,8 @@ import { Plus, Trash2, Check, Camera, Store, Scale } from 'lucide-react';
 import BarcodeScanner from './BarcodeScanner';
 import { lookupBarcode } from '../utils/lookupBarcode';
 import { supabase } from '../lib/supabase';
+import { STORES } from '../constants/stores';
+import StoreSelect from './StoreSelect';
 
 // ─── Tipos ──────────────────────────────────────────────────────────────────
 
@@ -16,12 +18,6 @@ interface PropItem {
   size: string;
   unit: SizeUnit;
 }
-
-const STORES = [
-  'Supermercado Gama', 'Supermercado El Plaza', 'Central Madeirense',
-  'Unicasa', 'Rio Vida', 'Supermercados RIO', 'Farmatodo',
-  'Supermercado Forum', 'Supermercado Luz', 'Supermercado Páramo',
-];
 
 // Normaliza todo a gramos o mililitros para comparar
 function toBaseUnit(size: number, unit: SizeUnit): number {
@@ -344,13 +340,7 @@ function PriceComparison() {
           {/* Registrar precio nuevo */}
           <div className="bg-gray-50 rounded-2xl p-4 space-y-3">
             <p className="text-sm font-semibold text-gray-700">Registrar precio</p>
-            <select
-              value={selectedStore}
-              onChange={e => setSelectedStore(e.target.value)}
-              className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-500"
-            >
-              {STORES.map(s => <option key={s} value={s}>{s}</option>)}
-            </select>
+            <StoreSelect value={selectedStore} onChange={setSelectedStore} variant="light" />
             <div className="flex gap-2">
               <div className="flex-1 relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">$</span>
