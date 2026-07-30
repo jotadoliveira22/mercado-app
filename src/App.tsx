@@ -11,7 +11,6 @@ import {
   fetchTrackerItems, pushTrackerItems,
   fetchSavedPurchases, pushSavedPurchases,
 } from './hooks/useSync';
-import { priceKeyCandidates } from './utils/priceKey';
 import type { ShoppingItem, TrackerItem, SavedPurchase } from './types';
 import type { User } from '@supabase/supabase-js';
 
@@ -115,14 +114,11 @@ export default function App() {
   // Lista → Carrito: agrega al final de lo que ya haya y vacía la lista.
   // Los productos sin precio registrado entran en 0 para que el usuario los
   // complete; nunca se estima un precio.
-  const migrateListToCart = useCallback((list: ShoppingItem[], prices: Map<string, number>) => {
+  const migrateListToCart = useCallback((list: ShoppingItem[], preciosPorItem: Map<string, number>) => {
     if (list.length === 0) return;
     const migrated: TrackerItem[] = list.map(item => {
-      let unitPrice = 0;
-      for (const key of priceKeyCandidates(item)) {
-        const found = prices.get(key);
-        if (found !== undefined) { unitPrice = found; break; }
-      }
+      // La Lista ya resolvió el precio, sea de los aportes o del catálogo.
+      const unitPrice = preciosPorItem.get(item.id) ?? 0;
       return {
         id: crypto.randomUUID(),
         name: item.name,

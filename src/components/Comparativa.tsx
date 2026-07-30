@@ -3,7 +3,7 @@ import { Plus, Trash2, Check, Camera, Store, Scale, Search } from 'lucide-react'
 import BarcodeScanner from './BarcodeScanner';
 import { lookupBarcode } from '../utils/lookupBarcode';
 import { supabase } from '../lib/supabase';
-import { buscarPrecios, type HitPrecio } from '../hooks/useSync';
+import { buscarPrecios, fetchCatalogoPorNombre, type HitPrecio } from '../hooks/useSync';
 import { STORES } from '../constants/stores';
 import StoreSelect from './StoreSelect';
 
@@ -217,6 +217,8 @@ function PriceComparison() {
   const [query, setQuery] = useState('');
   const [hits, setHits] = useState<HitPrecio[] | null>(null);
   const [buscando, setBuscando] = useState(false);
+  // Coincidencias del catálogo para el producto escaneado, cruzadas por nombre.
+  const [hitsCodigo, setHitsCodigo] = useState<HitPrecio[] | null>(null);
   const busqueda = useRef(0);
   const [selectedStore, setSelectedStore] = useState(STORES[0]);
   const [newPrice, setNewPrice] = useState('');
@@ -230,11 +232,31 @@ function PriceComparison() {
     const name = await lookupBarcode(code);
     setProductName(name || code);
     setLoadingLookup(false);
-    fetchPrices(code);
+    fetchPrices(code, name ?? undefined);
   };
 
-  const fetchPrices = async (code: string) => {
+  /** Búsqueda manual por código: también resuelve el nombre para cruzar el catálogo. */
+  const buscarPorCodigo = async () => {
+    const code = barcode.trim();
+    if (!code) return;
+    setLoadingLookup(true);
+    const name = await lookupBarcode(code);
+    setProductName(name || code);
+    setLoadingLookup(false);
+    fetchPrices(code, name ?? undefined);
+  };
+
+  /**
+   * Precios para un código de barras.
+   *
+   * Los aportes de la comunidad se cruzan por el código, que es exacto. El
+   * catálogo no tiene códigos de barras —los SKU son códigos internos de cada
+   * cadena, no EAN— así que se busca por el nombre del producto, que es el
+   * único puente disponible.
+   */
+  const fetchPrices = async (code: string, nombre?: string) => {
     setLoadingPrices(true);
+    setHitsCodigo(null);
     try {
       // El cliente adjunta el JWT de la sesión, así RLS ve al usuario real.
       const { data, error } = await supabase
@@ -244,6 +266,13 @@ function PriceComparison() {
         .order('price_usd', { ascending: true });
       if (!error && data) setPrices(data);
     } catch { /* sin red */ }
+
+    const paraBuscar = nombre?.trim();
+    if (paraBuscar && paraBuscar !== code) {
+      try {
+        setHitsCodigo(await fetchCatalogoPorNombre(paraBuscar));
+      } catch { /* sin red */ }
+    }
     setLoadingPrices(false);
   };
 
@@ -387,7 +416,7 @@ function PriceComparison() {
           className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
         />
         <button
-          onClick={() => { if (barcode) { setProductName(barcode); fetchPrices(barcode); } }}
+          onClick={buscarPorCodigo}
           className="bg-green-700 text-white rounded-xl px-4 py-2 text-sm hover:bg-green-600"
         >
           Buscar
@@ -436,6 +465,33 @@ function PriceComparison() {
               );
             })}
           </div>
+
+          {/* Coincidencias del catálogo, cruzadas por nombre */}
+          {hitsCodigo !== null && hitsCodigo.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                En el catálogo ({hitsCodigo.length})
+              </p>
+              <p className="text-[11px] text-gray-400 leading-snug -mt-1">
+                Encontrados por nombre: el catálogo de los supermercados no publica
+                códigos de barras, así que verifica que sea el mismo producto.
+              </p>
+              {hitsCodigo.map((h, i) => (
+                <div
+                  key={`cat-${h.establecimiento}-${i}`}
+                  className="flex items-center justify-between rounded-xl px-4 py-2.5 border border-blue-100 bg-blue-50"
+                >
+                  <div className="min-w-0">
+                    <p className="text-sm text-gray-800 leading-snug">{h.nombre}</p>
+                    <p className="text-xs font-semibold text-blue-700 mt-0.5">{h.establecimiento}</p>
+                  </div>
+                  <span className="font-bold text-sm text-gray-800 flex-shrink-0 ml-2">
+                    ${h.precioUsd.toFixed(2)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
 
           {/* Registrar precio nuevo */}
           <div className="bg-gray-50 rounded-2xl p-4 space-y-3">
