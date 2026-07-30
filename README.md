@@ -105,3 +105,42 @@ Es idempotente, se puede correr varias veces.
 
 Al final del archivo hay una consulta de verificación para confirmar que RLS
 quedó activo en las cuatro tablas.
+
+## Catálogo de precios de supermercados
+
+Importa un archivo de catálogo (`Base_precios_supermercados_vN.xlsx`) a las
+tablas `catalog_*`:
+
+```bash
+# 1. Aplicar el esquema en Supabase → SQL Editor
+#    db/catalog_schema.sql
+# 2. Poner SUPABASE_SERVICE_ROLE_KEY en .env (el catálogo es de solo lectura
+#    para los usuarios, así que la importación necesita esa clave)
+npm run import:catalog -- archivo.xlsx --dry-run   # ver qué haría
+npm run import:catalog -- archivo.xlsx             # importar
+```
+
+El catálogo se mantiene **separado** de `store_prices`: `catalog_*` son datos
+extraídos de los sitios de los supermercados y se reemplazan en cada corrida,
+mientras `store_prices` guarda lo que aportan los usuarios y nunca debe ser
+sobrescrito por una importación.
+
+Notas sobre los datos:
+
+- Los **SKU no son códigos de barras**: son códigos internos de cada cadena
+  (9-10 dígitos). El campo `barcode` queda vacío y se llenará con el tiempo.
+- La **moneda** se normaliza a USD. La fuente etiqueta parte de las filas como
+  `BSD`, pero los valores están en la misma escala que las marcadas `USD`
+  (verificado: el mismo producto vale 1.35 en ambas). `moneda_fuente` conserva
+  lo que dijo el sitio para poder auditarlo.
+- Se **omiten** las filas `PARCIAL`, cuyo nombre es "PRODUCTO SIN NOMBRE
+  PUBLICADO" y no sirven para comparar ni buscar.
+- La **categoría** se recalcula con `categorizeProduct()` para usar las mismas
+  22 categorías de la app; si devuelve 'Otros', se cae a la categoría del
+  archivo cuando la equivalencia es inequívoca.
+
+El lector de `.xlsx` (`scripts/lib/xlsx-reader.mjs`) está escrito a mano y sin
+dependencias: hoy ninguna librería de xlsx en npm está libre de
+vulnerabilidades (`xlsx` tiene una alta sin parche, `exceljs` arrastra
+`brace-expansion`). Está validado contra el archivo real: 11.743 filas,
+9.357 utilizables, conteos por sucursal y valores puntuales.
