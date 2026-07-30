@@ -2,6 +2,7 @@ import { supabase } from '../lib/supabase';
 import type { ShoppingItem, TrackerItem, SavedPurchase } from '../types';
 import { priceKey, normalizeName } from '../utils/priceKey';
 import { canonicalStore } from '../constants/stores';
+import type { CandidatoCatalogo } from '../utils/matchProducto';
 
 async function getUserId(): Promise<string | null> {
   const { data } = await supabase.auth.getUser();
@@ -249,6 +250,48 @@ export async function buscarPrecios(texto: string): Promise<HitPrecio[]> {
   }
 
   return hits.sort((a, b) => a.precioUsd - b.precioUsd);
+}
+
+// ── Catálogo de un establecimiento (para la Lista) ───────────────────────────
+
+/**
+ * Trae el catálogo completo de un establecimiento para cruzarlo con la lista.
+ *
+ * Se pide todo de una vez y el emparejamiento se hace en el navegador: el
+ * catálogo no tiene códigos de barras, así que cada producto de la lista debe
+ * compararse por nombre contra todos los candidatos, y hacerlo con una consulta
+ * por producto sería mucho más lento que traer el catálogo una sola vez al
+ * elegir el establecimiento.
+ */
+export async function fetchCatalogoDeTienda(store: string): Promise<CandidatoCatalogo[]> {
+  if (!store) return [];
+  const out: CandidatoCatalogo[] = [];
+  const PAGE = 1000;
+  for (let page = 0; ; page++) {
+    const { data, error } = await supabase
+      .from('catalog_precio_vigente')
+      .select('nombre,nombre_normalizado,precio_usd,presentacion')
+      .eq('store', store)
+      .range(page * PAGE, (page + 1) * PAGE - 1);
+    if (error) { console.error('fetch catálogo:', error); return out; }
+    for (const r of data) {
+      if (typeof r.precio_usd !== 'number' || !r.nombre_normalizado) continue;
+      out.push({
+        nombre: r.nombre,
+        nombreNorm: r.nombre_normalizado,
+        precio: r.precio_usd,
+        presentacion: r.presentacion,
+      });
+    }
+    if (data.length < PAGE) break;
+  }
+  return out;
+}
+
+/** Precios del catálogo para un código de barras, vía el nombre del producto. */
+export async function fetchCatalogoPorNombre(nombre: string): Promise<HitPrecio[]> {
+  const hits = await buscarPrecios(nombre);
+  return hits.filter(h => h.origen === 'catalogo');
 }
 
 // ── Precios por establecimiento (para la Lista) ──────────────────────────────

@@ -4,16 +4,25 @@ import type { ShoppingItem, Category, Unit } from '../types';
 import { categorizeProduct } from '../utils/categorize';
 import { lookupBarcode } from '../utils/lookupBarcode';
 import { priceKeyCandidates } from '../utils/priceKey';
-import { fetchStorePrices } from '../hooks/useSync';
+import { fetchStorePrices, fetchCatalogoDeTienda } from '../hooks/useSync';
+import { mejorCoincidencia, type CandidatoCatalogo } from '../utils/matchProducto';
 import BarcodeScanner from './BarcodeScanner';
 import NewProductModal from './NewProductModal';
 import StoreSelect from './StoreSelect';
 
+/** Precio resuelto para un producto de la lista, con su procedencia. */
+interface PrecioResuelto {
+  precio: number;
+  origen: 'catalogo' | 'comunidad';
+  /** Nombre del producto del catálogo con el que se emparejó. */
+  nombre?: string;
+}
+
 interface Props {
   items: ShoppingItem[];
   setItems: (val: ShoppingItem[] | ((prev: ShoppingItem[]) => ShoppingItem[])) => void;
-  /** Pasa la lista al carrito con los precios ya resueltos. */
-  onMigrateToCart: (items: ShoppingItem[], prices: Map<string, number>) => void;
+  /** Pasa la lista al carrito con el precio ya resuelto de cada producto. */
+  onMigrateToCart: (items: ShoppingItem[], preciosPorItem: Map<string, number>) => void;
 }
 
 const ALL_CATEGORIES: Category[] = [
@@ -63,6 +72,7 @@ export default function ShoppingList({ items, setItems, onMigrateToCart }: Props
 
   const [store, setStore] = useState('');
   const [prices, setPrices] = useState<Map<string, number>>(new Map());
+  const [catalogo, setCatalogo] = useState<CandidatoCatalogo[]>([]);
   const [loadingPrices, setLoadingPrices] = useState(false);
   // Descarta respuestas de un establecimiento que ya no está seleccionado.
   const priceRequest = useRef(0);
@@ -71,23 +81,35 @@ export default function ShoppingList({ items, setItems, onMigrateToCart }: Props
     const request = ++priceRequest.current;
     setStore(next);
     setPrices(new Map());
+    setCatalogo([]);
     if (!next) return;
     setLoadingPrices(true);
-    const result = await fetchStorePrices(next);
+    const [aportes, cat] = await Promise.all([
+      fetchStorePrices(next),
+      fetchCatalogoDeTienda(next),
+    ]);
     if (priceRequest.current !== request) return; // llegó tarde, ya hay otro
-    setPrices(result ?? new Map());
+    setPrices(aportes ?? new Map());
+    setCatalogo(cat);
     setLoadingPrices(false);
   }, []);
 
-  /** Precio unitario del producto en el establecimiento, o null si no está registrado. */
-  const priceOf = useCallback((item: ShoppingItem): number | null => {
-    if (prices.size === 0) return null;
+  /**
+   * Precio unitario del producto en el establecimiento, o null si no se conoce.
+   *
+   * Primero los aportes de la comunidad, que se cruzan por código de barras y
+   * por tanto son exactos. Si no hay, se busca en el catálogo por nombre: el
+   * catálogo no tiene códigos de barras, así que el nombre es el único puente.
+   */
+  const priceOf = useCallback((item: ShoppingItem): PrecioResuelto | null => {
     for (const key of priceKeyCandidates(item)) {
       const found = prices.get(key);
-      if (found !== undefined) return found;
+      if (found !== undefined) return { precio: found, origen: 'comunidad' };
     }
+    const m = mejorCoincidencia(item.name, catalogo);
+    if (m) return { precio: m.candidato.precio, origen: 'catalogo', nombre: m.candidato.nombre };
     return null;
-  }, [prices]);
+  }, [prices, catalogo]);
 
   // Total estimado: solo suma lo que sí tiene precio, y cuenta lo que falta
   // para no presentar un total parcial como si fuera completo.
@@ -95,9 +117,9 @@ export default function ShoppingList({ items, setItems, onMigrateToCart }: Props
     let total = 0;
     let withPrice = 0;
     for (const item of items) {
-      const price = priceOf(item);
-      if (price === null) continue;
-      total += price * (item.quantity ?? 1);
+      const p = priceOf(item);
+      if (p === null) continue;
+      total += p.precio * (item.quantity ?? 1);
       withPrice++;
     }
     return { total, withPrice, missing: items.length - withPrice };
@@ -150,7 +172,14 @@ export default function ShoppingList({ items, setItems, onMigrateToCart }: Props
 
   const migrateToCart = () => {
     if (items.length === 0) return;
-    onMigrateToCart(items, prices);
+    // Se resuelve aquí y se pasa por id de producto: el precio puede venir del
+    // catálogo, y ese cruce se hace por nombre, no por la clave de los aportes.
+    const resueltos = new Map<string, number>();
+    for (const item of items) {
+      const p = priceOf(item);
+      if (p) resueltos.set(item.id, p.precio);
+    }
+    onMigrateToCart(items, resueltos);
   };
 
   const toggleItem = (id: string) => {
@@ -327,7 +356,7 @@ export default function ShoppingList({ items, setItems, onMigrateToCart }: Props
                   {!isCollapsed && (
                     <ul>
                       {catItems.map((item, idx) => {
-                        const unitPrice = priceOf(item);
+                        const resuelto = priceOf(item);
                         return (
                         <li
                           key={item.id}
@@ -357,11 +386,26 @@ export default function ShoppingList({ items, setItems, onMigrateToCart }: Props
                               de datos se deja en blanco, nunca estimado. */}
                           {store && (
                             <span className="text-right flex-shrink-0 min-w-[52px]">
-                              {unitPrice === null ? (
+                              {resuelto === null ? (
                                 <span className="text-gray-300 text-xs">—</span>
                               ) : (
-                                <span className={`text-sm font-bold ${item.checked ? 'text-gray-400' : 'text-green-700'}`}>
-                                  ${(unitPrice * (item.quantity ?? 1)).toFixed(2)}
+                                <span className="flex items-center justify-end gap-1">
+                                  {/* Punto de origen: azul si el precio viene del
+                                      catálogo del supermercado, ámbar si lo
+                                      aportó otro usuario. */}
+                                  <span
+                                    title={
+                                      resuelto.origen === 'catalogo'
+                                        ? `Catálogo: ${resuelto.nombre ?? ''}`
+                                        : 'Precio aportado por la comunidad'
+                                    }
+                                    className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
+                                      resuelto.origen === 'catalogo' ? 'bg-blue-400' : 'bg-amber-400'
+                                    }`}
+                                  />
+                                  <span className={`text-sm font-bold ${item.checked ? 'text-gray-400' : 'text-green-700'}`}>
+                                    ${(resuelto.precio * (item.quantity ?? 1)).toFixed(2)}
+                                  </span>
                                 </span>
                               )}
                             </span>
