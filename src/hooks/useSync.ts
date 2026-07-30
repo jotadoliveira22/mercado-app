@@ -1,6 +1,7 @@
 import { supabase } from '../lib/supabase';
 import type { ShoppingItem, TrackerItem, SavedPurchase } from '../types';
-import { priceKey } from '../utils/priceKey';
+import { priceKey, normalizeName } from '../utils/priceKey';
+import { canonicalStore } from '../constants/stores';
 
 async function getUserId(): Promise<string | null> {
   const { data } = await supabase.auth.getUser();
@@ -157,6 +158,97 @@ export async function pushPricesToComparative(items: TrackerItem[], store: strin
     .from('store_prices')
     .upsert(rows, { onConflict: 'barcode,store' });
   if (error) console.error('push store_prices:', error);
+}
+
+// ── Búsqueda de precios por texto (Comparativa) ──────────────────────────────
+
+export interface HitPrecio {
+  /** De dónde viene el precio: el catálogo extraído o el aporte de un usuario. */
+  origen: 'catalogo' | 'comunidad';
+  establecimiento: string;
+  nombre: string;
+  precioUsd: number;
+  presentacion?: string | null;
+}
+
+const LIMITE_BUSQUEDA = 40;
+
+/**
+ * Busca precios por texto en el catálogo y en los aportes de la comunidad.
+ *
+ * Se busca por subcadena, no por nombre exacto: los catálogos publican nombres
+ * como "Harina Pan Mezcla Maiz Blanco y Arroz 1KG", así que buscar el texto
+ * exacto que escribe el usuario no devuelve nada.
+ */
+export async function buscarPrecios(texto: string): Promise<HitPrecio[]> {
+  const termino = normalizeName(texto);
+  if (termino.length < 3) return [];
+  const crudo = texto.trim().toLowerCase();
+
+  const buscarComunidad = (patron: string) =>
+    supabase
+      .from('store_prices')
+      .select('store,product_name,price_usd')
+      .ilike('product_name', `%${patron}%`)
+      .order('price_usd', { ascending: true })
+      .limit(LIMITE_BUSQUEDA);
+
+  // `catalog_products.nombre_normalizado` ya viene sin acentos, pero
+  // `store_prices.product_name` guarda el nombre tal como lo escribió el
+  // usuario. Por eso los aportes se buscan también con el texto crudo: si
+  // alguien registró "Café Madrid", el término normalizado "cafe" no lo
+  // encontraría.
+  const patrones = crudo !== termino ? [termino, crudo] : [termino];
+
+  // Las dos consultas van en una tupla, no en un array mezclado: así
+  // TypeScript conserva el tipo de cada respuesta por separado.
+  const [catalogo, respuestasComunidad] = await Promise.all([
+    supabase
+      .from('catalog_precio_vigente')
+      .select('store,nombre,precio_usd,presentacion')
+      .ilike('nombre_normalizado', `%${termino}%`)
+      .order('precio_usd', { ascending: true })
+      .limit(LIMITE_BUSQUEDA),
+    Promise.all(patrones.map(buscarComunidad)),
+  ]);
+
+  if (catalogo.error) console.error('buscar catálogo:', catalogo.error);
+
+  const hits: HitPrecio[] = [];
+
+  for (const r of catalogo.data ?? []) {
+    // `store` sale de app_store_name: si la cadena aún no se muestra en la app,
+    // el precio no es comparable con lo que el usuario puede elegir.
+    if (!r.store || typeof r.precio_usd !== 'number') continue;
+    hits.push({
+      origen: 'catalogo',
+      establecimiento: r.store,
+      nombre: r.nombre,
+      precioUsd: r.precio_usd,
+      presentacion: r.presentacion,
+    });
+  }
+
+  // Las dos búsquedas de aportes pueden traer la misma fila, así que se
+  // deduplica por establecimiento y producto.
+  const vistos = new Set<string>();
+  for (const respuesta of respuestasComunidad) {
+    if (respuesta.error) { console.error('buscar store_prices:', respuesta.error); continue; }
+    for (const r of respuesta.data ?? []) {
+      if (!r.store || typeof r.price_usd !== 'number' || r.price_usd <= 0) continue;
+      const clave = `${r.store}|${r.product_name}`;
+      if (vistos.has(clave)) continue;
+      vistos.add(clave);
+      hits.push({
+        origen: 'comunidad',
+        establecimiento: canonicalStore(r.store),
+        nombre: r.product_name ?? texto,
+        precioUsd: r.price_usd,
+      });
+    }
+  }
+
+  return hits.sort((a, b) => a.precioUsd - b.precioUsd);
 }
 
 // ── Precios por establecimiento (para la Lista) ──────────────────────────────
