@@ -1,6 +1,27 @@
 const SUPABASE_URL = 'https://sjhvwraukqaebewytmln.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNqaHZ3cmF1a3FhZWJld3l0bWxuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE4MDkxMDksImV4cCI6MjA5NzM4NTEwOX0.kEYjPlnlOoNy70GmRaJic7-FhMxuCb3jFidx1aKebhU';
 const CACHE_KEY = 'custom-products-cache';
+
+/**
+ * Tope de espera por consulta.
+ *
+ * `lookupBarcode` encadena hasta cuatro servicios. Sin límite, cada uno puede
+ * quedarse colgado mucho tiempo con señal débil, y el usuario veía "Buscando
+ * producto..." indefinidamente. Con el tope, la búsqueda falla rápido y cae al
+ * siguiente servicio o devuelve vacío.
+ */
+const TIMEOUT_MS = 4000;
+
+/** fetch con límite de tiempo: aborta en vez de quedarse esperando. */
+async function fetchConTope(url: string, init?: RequestInit): Promise<Response> {
+  const ac = new AbortController();
+  const t = setTimeout(() => ac.abort(), TIMEOUT_MS);
+  try {
+    return await fetch(url, { ...init, signal: ac.signal });
+  } finally {
+    clearTimeout(t);
+  }
+}
 const HEADERS = {
   'apikey': SUPABASE_KEY,
   'Authorization': `Bearer ${SUPABASE_KEY}`,
@@ -40,7 +61,7 @@ async function lookupSupabase(barcode: string): Promise<string | null> {
   if (cache[barcode]) return cache[barcode];
 
   try {
-    const res = await fetch(
+    const res = await fetchConTope(
       `${SUPABASE_URL}/rest/v1/custom_products?barcode=eq.${encodeURIComponent(barcode)}&select=name&limit=1`,
       { headers: HEADERS }
     );
@@ -62,7 +83,7 @@ let veDb: Record<string, string> | null = null;
 async function getVeDb(): Promise<Record<string, string>> {
   if (!veDb) {
     try {
-      const res = await fetch('/products-ve.json');
+      const res = await fetchConTope('/products-ve.json');
       veDb = res.ok ? await res.json() : {};
     } catch { veDb = {}; }
   }
@@ -80,7 +101,7 @@ export async function lookupBarcode(barcode: string): Promise<string> {
 
   // 3. Open Food Facts
   try {
-    const res = await fetch(`https://world.openfoodfacts.org/api/v0/product/${barcode}.json`);
+    const res = await fetchConTope(`https://world.openfoodfacts.org/api/v0/product/${barcode}.json`);
     if (res.ok) {
       const data = await res.json();
       const name = data?.product?.product_name_es || data?.product?.product_name || '';
@@ -90,7 +111,7 @@ export async function lookupBarcode(barcode: string): Promise<string> {
 
   // 4. UPC Item DB
   try {
-    const res = await fetch(`https://api.upcitemdb.com/prod/trial/lookup?upc=${barcode}`);
+    const res = await fetchConTope(`https://api.upcitemdb.com/prod/trial/lookup?upc=${barcode}`);
     if (res.ok) {
       const data = await res.json();
       const title = data?.items?.[0]?.title ?? '';
