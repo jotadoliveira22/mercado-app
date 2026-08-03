@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { ShoppingCart, ShoppingBag, BarChart2, GitCompare, Cloud, CloudOff, Loader, LogOut } from 'lucide-react';
 import ShoppingList from './components/ShoppingList';
 import CostTracker from './components/CostTracker';
@@ -12,7 +12,16 @@ import {
   fetchSavedPurchases, pushSavedPurchases,
 } from './hooks/useSync';
 import type { ShoppingItem, TrackerItem, SavedPurchase } from './types';
+import {
+  leerLocal, guardarLocal, marcarPendiente, limpiarPendiente, hayPendiente,
+} from './utils/localStore';
 import type { User } from '@supabase/supabase-js';
+
+// Claves de almacenamiento local. Se centralizan para que el guardado, la marca
+// de pendiente y el reintento usen siempre la misma.
+const CLAVE_LISTA = 'shopping-items';
+const CLAVE_CARRITO = 'tracker-items';
+const CLAVE_COMPRAS = 'saved-purchases';
 
 type Tab = 'list' | 'cart' | 'reports' | 'compare';
 type SyncState = 'loading' | 'ok' | 'error';
@@ -29,15 +38,9 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<Tab>('list');
   const [syncState, setSyncState] = useState<SyncState>('loading');
 
-  const [shoppingItems, setShoppingItemsRaw] = useState<ShoppingItem[]>(() => {
-    try { return JSON.parse(localStorage.getItem('shopping-items') || '[]'); } catch { return []; }
-  });
-  const [trackerItems, setTrackerItemsRaw] = useState<TrackerItem[]>(() => {
-    try { return JSON.parse(localStorage.getItem('tracker-items') || '[]'); } catch { return []; }
-  });
-  const [savedPurchases, setSavedPurchasesRaw] = useState<SavedPurchase[]>(() => {
-    try { return JSON.parse(localStorage.getItem('saved-purchases') || '[]'); } catch { return []; }
-  });
+  const [shoppingItems, setShoppingItemsRaw] = useState<ShoppingItem[]>(() => leerLocal(CLAVE_LISTA, []));
+  const [trackerItems, setTrackerItemsRaw] = useState<TrackerItem[]>(() => leerLocal(CLAVE_CARRITO, []));
+  const [savedPurchases, setSavedPurchasesRaw] = useState<SavedPurchase[]>(() => leerLocal(CLAVE_COMPRAS, []));
 
   // Listen to auth state
   useEffect(() => {
@@ -50,66 +53,131 @@ export default function App() {
     return () => subscription.unsubscribe();
   }, []);
 
-  // Load from Supabase when user logs in
+  /** Reintenta subir lo que quedó pendiente (al volver la señal, o tras cargar). */
+  const subirPendientes = useCallback(async () => {
+    const tareas: Array<Promise<void>> = [];
+    if (hayPendiente(CLAVE_LISTA)) {
+      tareas.push(pushShoppingItems(leerLocal(CLAVE_LISTA, [])).then(() => limpiarPendiente(CLAVE_LISTA)));
+    }
+    if (hayPendiente(CLAVE_CARRITO)) {
+      tareas.push(pushTrackerItems(leerLocal(CLAVE_CARRITO, [])).then(() => limpiarPendiente(CLAVE_CARRITO)));
+    }
+    if (hayPendiente(CLAVE_COMPRAS)) {
+      tareas.push(pushSavedPurchases(leerLocal(CLAVE_COMPRAS, [])).then(() => limpiarPendiente(CLAVE_COMPRAS)));
+    }
+    if (tareas.length === 0) return;
+    setSyncState('loading');
+    try {
+      await Promise.all(tareas);
+      setSyncState('ok');
+    } catch (err) {
+      console.error('reintento de sync', err);
+      setSyncState('error');
+    }
+  }, []);
+
+  /**
+   * Carga desde la nube al entrar, UNA sola vez por usuario.
+   *
+   * Antes esto dependía del objeto `user`, que Supabase reemplaza en cada
+   * evento de sesión —refresco de token, volver a la app—. Cada uno de esos
+   * eventos volvía a ejecutar la carga y pisaba lo que el usuario tenía en
+   * pantalla con lo que hubiera en la nube: si acababa de agregar algo y la
+   * subida seguía en vuelo, ese producto desaparecía.
+   *
+   * Ahora depende del id del usuario y una referencia recuerda cuál ya se
+   * cargó, así que un refresco de token no dispara nada.
+   */
+  const usuarioCargado = useRef<string | null>(null);
+
   useEffect(() => {
-    if (!user) return;
-    let cancelled = false;
-    async function loadFromCloud() {
+    const userId = user?.id;
+    if (!userId || usuarioCargado.current === userId) return;
+    usuarioCargado.current = userId;
+
+    let cancelado = false;
+    (async () => {
       setSyncState('loading');
       try {
         const [shopping, tracker, purchases] = await Promise.all([
-          fetchShoppingItems(),
-          fetchTrackerItems(),
-          fetchSavedPurchases(),
+          hayPendiente(CLAVE_LISTA) ? null : fetchShoppingItems(),
+          hayPendiente(CLAVE_CARRITO) ? null : fetchTrackerItems(),
+          hayPendiente(CLAVE_COMPRAS) ? null : fetchSavedPurchases(),
         ]);
-        if (cancelled) return;
-        if (shopping !== null) {
-          setShoppingItemsRaw(shopping);
-          localStorage.setItem('shopping-items', JSON.stringify(shopping));
-        }
-        if (tracker !== null) {
-          setTrackerItemsRaw(tracker);
-          localStorage.setItem('tracker-items', JSON.stringify(tracker));
-        }
-        if (purchases !== null) {
-          setSavedPurchasesRaw(purchases);
-          localStorage.setItem('saved-purchases', JSON.stringify(purchases));
-        }
+        if (cancelado) return;
+        // Solo se adopta lo de la nube cuando no hay cambios locales sin subir.
+        // Con cambios pendientes manda lo local, y se reintenta la subida.
+        if (shopping !== null) { setShoppingItemsRaw(shopping); guardarLocal(CLAVE_LISTA, shopping); }
+        if (tracker !== null) { setTrackerItemsRaw(tracker); guardarLocal(CLAVE_CARRITO, tracker); }
+        if (purchases !== null) { setSavedPurchasesRaw(purchases); guardarLocal(CLAVE_COMPRAS, purchases); }
         setSyncState('ok');
       } catch {
-        if (!cancelled) setSyncState('error');
+        if (!cancelado) setSyncState('error');
       }
-    }
-    loadFromCloud();
-    return () => { cancelled = true; };
-  }, [user]);
+      if (!cancelado) subirPendientes();
+    })();
+    return () => { cancelado = true; };
+  }, [user?.id, subirPendientes]);
+
+  /**
+   * Guarda un cambio: primero en el navegador, después en la nube.
+   *
+   * El guardado local y la subida quedan FUERA del actualizador de estado. Ahí
+   * dentro no pueden ir efectos secundarios: React puede ejecutar esa función
+   * más de una vez por render, lo que provocaba subidas duplicadas.
+   *
+   * Si la subida falla —sin señal, servidor caído— el cambio queda marcado como
+   * pendiente y se reintenta al volver la conexión. Lo local nunca se pierde.
+   */
+  const guardar = useCallback(<T,>(
+    clave: string,
+    valor: T[],
+    aplicar: (v: T[]) => void,
+    subir: (v: T[]) => Promise<void>,
+  ) => {
+    aplicar(valor);
+    guardarLocal(clave, valor);
+    marcarPendiente(clave);
+    setSyncState('loading');
+    subir(valor)
+      .then(() => { limpiarPendiente(clave); setSyncState('ok'); })
+      .catch(err => { console.error('sync', clave, err); setSyncState('error'); });
+  }, []);
 
   const setShoppingItems = useCallback((val: ShoppingItem[] | ((prev: ShoppingItem[]) => ShoppingItem[])) => {
     setShoppingItemsRaw(prev => {
       const next = val instanceof Function ? val(prev) : val;
-      localStorage.setItem('shopping-items', JSON.stringify(next));
-      pushShoppingItems(next).catch(() => {});
+      // El estado ya se actualiza aquí; el guardado y la subida van en cola
+      // aparte para no repetirse si React reejecuta este actualizador.
+      queueMicrotask(() => guardar(CLAVE_LISTA, next, () => {}, pushShoppingItems));
       return next;
     });
-  }, []);
+  }, [guardar]);
 
   const setTrackerItems = useCallback((val: TrackerItem[] | ((prev: TrackerItem[]) => TrackerItem[])) => {
     setTrackerItemsRaw(prev => {
       const next = val instanceof Function ? val(prev) : val;
-      localStorage.setItem('tracker-items', JSON.stringify(next));
-      pushTrackerItems(next).catch(() => {});
+      queueMicrotask(() => guardar(CLAVE_CARRITO, next, () => {}, pushTrackerItems));
       return next;
     });
-  }, []);
+  }, [guardar]);
 
   const setSavedPurchases = useCallback((val: SavedPurchase[] | ((prev: SavedPurchase[]) => SavedPurchase[])) => {
     setSavedPurchasesRaw(prev => {
       const next = val instanceof Function ? val(prev) : val;
-      localStorage.setItem('saved-purchases', JSON.stringify(next));
-      pushSavedPurchases(next).catch(() => {});
+      queueMicrotask(() => guardar(CLAVE_COMPRAS, next, () => {}, pushSavedPurchases));
       return next;
     });
-  }, []);
+  }, [guardar]);
+
+  // Al recuperar la señal se reintenta lo pendiente, sin tocar lo que hay en
+  // pantalla: recargar desde la nube en este momento borraría los cambios que
+  // el usuario hizo justamente mientras estaba sin conexión.
+  useEffect(() => {
+    const alVolver = () => { subirPendientes(); };
+    window.addEventListener('online', alVolver);
+    return () => window.removeEventListener('online', alVolver);
+  }, [subirPendientes]);
 
   // Lista → Carrito: agrega al final de lo que ya haya y vacía la lista.
   // Los productos sin precio registrado entran en 0 para que el usuario los
@@ -136,9 +204,11 @@ export default function App() {
 
   const logout = async () => {
     await supabase.auth.signOut();
-    localStorage.removeItem('shopping-items');
-    localStorage.removeItem('tracker-items');
-    localStorage.removeItem('saved-purchases');
+    for (const clave of [CLAVE_LISTA, CLAVE_CARRITO, CLAVE_COMPRAS]) {
+      localStorage.removeItem(clave);
+      limpiarPendiente(clave);
+    }
+    usuarioCargado.current = null;
     setShoppingItemsRaw([]);
     setTrackerItemsRaw([]);
     setSavedPurchasesRaw([]);

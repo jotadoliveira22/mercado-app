@@ -9,6 +9,40 @@ async function getUserId(): Promise<string | null> {
   return data.user?.id ?? null;
 }
 
+/**
+ * Sincroniza una colección del usuario: inserta o actualiza lo que hay, y
+ * borra solo lo que ya no está.
+ *
+ * Antes se hacía `delete` de todo y luego `insert`. Si la conexión se cortaba
+ * entre ambos pasos —cosa habitual en datos móviles— la nube quedaba vacía, y
+ * la siguiente carga propagaba ese vacío al teléfono: el usuario perdía el
+ * carrito completo. Con upsert primero y borrado selectivo después, una caída a
+ * media operación deja como mucho filas de más, nunca de menos.
+ *
+ * Lanza excepción si algo falla, para que quien llama pueda dejar el cambio
+ * marcado como pendiente y reintentarlo.
+ */
+async function sincronizarColeccion(
+  tabla: string,
+  userId: string,
+  filas: Array<{ id: string } & Record<string, unknown>>,
+) {
+  if (filas.length > 0) {
+    const { error } = await supabase.from(tabla).upsert(filas);
+    if (error) throw new Error(`${tabla} upsert: ${error.message}`);
+  }
+
+  let consulta = supabase.from(tabla).delete().eq('user_id', userId);
+  if (filas.length > 0) {
+    // Los ids son UUID generados por crypto.randomUUID(); se saneen igual para
+    // que ningún carácter raro rompa el filtro.
+    const lista = filas.map(f => `"${String(f.id).replace(/["\\,()]/g, '')}"`).join(',');
+    consulta = consulta.not('id', 'in', `(${lista})`);
+  }
+  const { error } = await consulta;
+  if (error) throw new Error(`${tabla} delete: ${error.message}`);
+}
+
 // ── Shopping Items ──────────────────────────────────────────────────────────
 
 export async function fetchShoppingItems(): Promise<ShoppingItem[] | null> {
@@ -34,9 +68,7 @@ export async function fetchShoppingItems(): Promise<ShoppingItem[] | null> {
 
 export async function pushShoppingItems(items: ShoppingItem[]) {
   const userId = await getUserId();
-  if (!userId) return;
-  await supabase.from('shopping_items').delete().eq('user_id', userId);
-  if (items.length === 0) return;
+  if (!userId) throw new Error('sin sesión');
   const rows = items.map(i => ({
     id: i.id,
     user_id: userId,
@@ -48,8 +80,7 @@ export async function pushShoppingItems(items: ShoppingItem[]) {
     unit: i.unit,
     barcode: i.barcode ?? null,
   }));
-  const { error } = await supabase.from('shopping_items').insert(rows);
-  if (error) console.error('push shopping_items:', error);
+  await sincronizarColeccion('shopping_items', userId, rows);
 }
 
 // ── Tracker Items ───────────────────────────────────────────────────────────
@@ -75,9 +106,7 @@ export async function fetchTrackerItems(): Promise<TrackerItem[] | null> {
 
 export async function pushTrackerItems(items: TrackerItem[]) {
   const userId = await getUserId();
-  if (!userId) return;
-  await supabase.from('tracker_items').delete().eq('user_id', userId);
-  if (items.length === 0) return;
+  if (!userId) throw new Error('sin sesión');
   const rows = items.map(i => ({
     id: i.id,
     user_id: userId,
@@ -88,8 +117,7 @@ export async function pushTrackerItems(items: TrackerItem[]) {
     category: i.category ?? null,
     barcode: i.barcode ?? null,
   }));
-  const { error } = await supabase.from('tracker_items').insert(rows);
-  if (error) console.error('push tracker_items:', error);
+  await sincronizarColeccion('tracker_items', userId, rows);
 }
 
 // ── Saved Purchases ─────────────────────────────────────────────────────────
@@ -116,9 +144,7 @@ export async function fetchSavedPurchases(): Promise<SavedPurchase[] | null> {
 
 export async function pushSavedPurchases(purchases: SavedPurchase[]) {
   const userId = await getUserId();
-  if (!userId) return;
-  await supabase.from('saved_purchases').delete().eq('user_id', userId);
-  if (purchases.length === 0) return;
+  if (!userId) throw new Error('sin sesión');
   const rows = purchases.map(p => ({
     id: p.id,
     user_id: userId,
@@ -129,8 +155,7 @@ export async function pushSavedPurchases(purchases: SavedPurchase[]) {
     total_usdt: p.totalBinance,
     store: p.store ?? null,
   }));
-  const { error } = await supabase.from('saved_purchases').insert(rows);
-  if (error) console.error('push saved_purchases:', error);
+  await sincronizarColeccion('saved_purchases', userId, rows);
 }
 
 // ── Store Prices (Comparativa) ───────────────────────────────────────────────
