@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback, useRef } from 'react';
-import { Plus, Trash2, ChevronDown, ChevronRight, ShoppingCart, ScanLine, ShoppingBag, Loader } from 'lucide-react';
+import { Plus, Trash2, ChevronDown, ChevronRight, ShoppingCart, ScanLine, ShoppingBag, Loader, Search } from 'lucide-react';
 import type { ShoppingItem, Category, Unit } from '../types';
 import { categorizeProduct } from '../utils/categorize';
 import { lookupBarcode } from '../utils/lookupBarcode';
@@ -9,6 +9,7 @@ import { mejorCoincidencia, type CandidatoCatalogo } from '../utils/matchProduct
 import BarcodeScanner from './BarcodeScanner';
 import NewProductModal from './NewProductModal';
 import StoreSelect from './StoreSelect';
+import BuscadorCatalogo from './BuscadorCatalogo';
 
 /** Precio resuelto para un producto de la lista, con su procedencia. */
 interface PrecioResuelto {
@@ -69,6 +70,7 @@ export default function ShoppingList({ items, setItems, onMigrateToCart }: Props
   const [unknownBarcode, setUnknownBarcode] = useState<string | null>(null);
   // Código del último escaneo, para guardarlo junto al producto.
   const [scannedBarcode, setScannedBarcode] = useState<string | undefined>(undefined);
+  const [showBuscador, setShowBuscador] = useState(false);
 
   const [store, setStore] = useState('');
   const [prices, setPrices] = useState<Map<string, number>>(new Map());
@@ -170,6 +172,24 @@ export default function ShoppingList({ items, setItems, onMigrateToCart }: Props
     }
   }, []);
 
+  /**
+   * Producto elegido del buscador: se agrega directo con la cantidad y unidad
+   * que ya están en el formulario. El nombre queda idéntico al del catálogo,
+   * así que el precio se resuelve de forma exacta y no por aproximación.
+   */
+  const agregarDelCatalogo = (producto: CandidatoCatalogo) => {
+    setShowBuscador(false);
+    setItems(prev => [...prev, {
+      id: crypto.randomUUID(),
+      name: producto.nombre,
+      category: categorizeProduct(producto.nombre),
+      checked: false,
+      createdAt: Date.now(),
+      quantity: parseFloat(quantity) || 1,
+      unit,
+    }]);
+  };
+
   const migrateToCart = () => {
     if (items.length === 0) return;
     // Se resuelve aquí y se pasa por id de producto: el precio puede venir del
@@ -207,6 +227,15 @@ export default function ShoppingList({ items, setItems, onMigrateToCart }: Props
     <div className="flex flex-col h-full">
       {showScanner && (
         <BarcodeScanner onScan={handleScan} onClose={() => setShowScanner(false)} />
+      )}
+      {showBuscador && (
+        <BuscadorCatalogo
+          catalogo={catalogo}
+          establecimiento={store}
+          cargando={loadingPrices}
+          onElegir={agregarDelCatalogo}
+          onCerrar={() => setShowBuscador(false)}
+        />
       )}
       {unknownBarcode && (
         <NewProductModal
@@ -283,6 +312,14 @@ export default function ShoppingList({ items, setItems, onMigrateToCart }: Props
             disabled={loadingProduct}
             className="flex-1 border border-gray-300 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
           />
+          <button
+            onClick={() => setShowBuscador(true)}
+            disabled={!store}
+            title={store ? 'Buscar en el catálogo' : 'Selecciona un establecimiento para buscar'}
+            className="bg-green-100 hover:bg-green-200 text-green-700 rounded-xl px-3 py-2 flex items-center transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            <Search size={20} />
+          </button>
           <button
             onClick={() => setShowScanner(true)}
             className="bg-green-100 hover:bg-green-200 text-green-700 rounded-xl px-3 py-2 flex items-center transition-colors"

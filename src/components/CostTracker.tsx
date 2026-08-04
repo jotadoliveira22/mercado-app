@@ -1,8 +1,9 @@
 import { useState, useCallback, useRef } from 'react';
-import { Plus, Trash2, Edit2, Check, X, RefreshCw, Camera, DollarSign, AlertCircle, CreditCard, Save } from 'lucide-react';
+import { Plus, Trash2, Edit2, Check, X, RefreshCw, Camera, DollarSign, AlertCircle, CreditCard, Save, Search } from 'lucide-react';
 import type { TrackerItem, ExchangeRates, Unit, SavedPurchase } from '../types';
 import { useExchangeRates } from '../hooks/useExchangeRates';
-import { pushPricesToComparative } from '../hooks/useSync';
+import { pushPricesToComparative, fetchCatalogoDeTienda } from '../hooks/useSync';
+import { type CandidatoCatalogo } from '../utils/matchProducto';
 
 interface Props {
   trackerItems: TrackerItem[];
@@ -15,6 +16,7 @@ import { categorizeProduct } from '../utils/categorize';
 import BarcodeScanner from './BarcodeScanner';
 import NewProductModal from './NewProductModal';
 import StoreSelect from './StoreSelect';
+import BuscadorCatalogo from './BuscadorCatalogo';
 
 type CasheaRate = 20 | 40;
 
@@ -50,6 +52,12 @@ export default function CostTracker({ trackerItems: items, setTrackerItems: setI
   const [showCashea, setShowCashea] = useState(false);
 
   const [selectedStore, setSelectedStore] = useState('');
+  // Catálogo del establecimiento, para el buscador. Se carga al elegir tienda.
+  const [catalogo, setCatalogo] = useState<CandidatoCatalogo[]>([]);
+  const [cargandoCatalogo, setCargandoCatalogo] = useState(false);
+  const [showBuscador, setShowBuscador] = useState(false);
+  const pedidoCatalogo = useRef(0);
+
   const [form, setForm] = useState({ name: '', quantity: '', unitPrice: '', unit: 'Und' as Unit });
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({ name: '', quantity: '1', unitPrice: '', unit: 'Und' as Unit });
@@ -59,6 +67,36 @@ export default function CostTracker({ trackerItems: items, setTrackerItems: setI
   // Kg weight accumulator
   const [kgParcials, setKgParcials] = useState<number[]>([]);
   const kgInputRef = useRef<HTMLInputElement>(null);
+
+  const cambiarTienda = useCallback(async (next: string) => {
+    const pedido = ++pedidoCatalogo.current;
+    setSelectedStore(next);
+    setCatalogo([]);
+    if (!next) return;
+    setCargandoCatalogo(true);
+    const cat = await fetchCatalogoDeTienda(next);
+    if (pedidoCatalogo.current !== pedido) return; // llegó tarde, ya hay otro
+    setCatalogo(cat);
+    setCargandoCatalogo(false);
+  }, []);
+
+  /**
+   * Producto elegido del buscador: rellena nombre y precio del catálogo.
+   *
+   * El precio queda editable a propósito: los del catálogo tienen fecha de
+   * extracción y en la tienda puede costar distinto. Se ahorra el tecleo sin
+   * afirmar que ese es el precio de hoy.
+   */
+  const usarDelCatalogo = (producto: CandidatoCatalogo) => {
+    setShowBuscador(false);
+    setScannedBarcode(undefined);
+    setForm(prev => ({
+      ...prev,
+      name: producto.nombre,
+      unitPrice: String(producto.precio),
+      quantity: prev.quantity || '1',
+    }));
+  };
 
   const totalUSD = items.reduce((sum, i) => sum + i.quantity * i.unitPrice, 0);
   // Productos traídos de la Lista sin precio registrado, pendientes de completar.
@@ -185,7 +223,7 @@ export default function CostTracker({ trackerItems: items, setTrackerItems: setI
         <h2 className="text-white font-bold text-lg">Carrito de Compras</h2>
 
         {/* Selector de establecimiento */}
-        <StoreSelect value={selectedStore} onChange={setSelectedStore} />
+        <StoreSelect value={selectedStore} onChange={cambiarTienda} />
 
         {/* Total cards */}
         <div className="grid grid-cols-3 gap-2">
@@ -316,6 +354,14 @@ export default function CostTracker({ trackerItems: items, setTrackerItems: setI
             disabled={loadingProduct}
             className="flex-1 border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
           />
+          <button
+            onClick={() => setShowBuscador(true)}
+            disabled={!selectedStore}
+            title={selectedStore ? 'Buscar en el catálogo' : 'Selecciona un establecimiento para buscar'}
+            className="bg-green-700 text-white rounded-xl px-3 py-2 hover:bg-green-600 transition-colors flex-shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            <Search size={18} />
+          </button>
           <button
             onClick={() => setShowScanner(true)}
             className="bg-green-700 text-white rounded-xl px-3 py-2 hover:bg-green-600 transition-colors flex-shrink-0"
@@ -507,6 +553,15 @@ export default function CostTracker({ trackerItems: items, setTrackerItems: setI
 
       {showScanner && (
         <BarcodeScanner onScan={handleScan} onClose={() => setShowScanner(false)} />
+      )}
+      {showBuscador && (
+        <BuscadorCatalogo
+          catalogo={catalogo}
+          establecimiento={selectedStore}
+          cargando={cargandoCatalogo}
+          onElegir={usarDelCatalogo}
+          onCerrar={() => setShowBuscador(false)}
+        />
       )}
       {unknownBarcode && (
         <NewProductModal
