@@ -1,5 +1,4 @@
 import { normalizeName } from './priceKey';
-import { categorizeProduct } from './categorize';
 
 /**
  * Equivalencia entre unidades y peso, para productos vendidos por Kg.
@@ -77,6 +76,7 @@ export const PESOS_REFERENCIA: PesoReferencia[] = [
   { claves: ['piña'], gramos: 1200 },
   { claves: ['pina'], gramos: 1200 },
   { claves: ['lechosa'], gramos: 1500 },
+  { claves: ['lechoza'], gramos: 1500 }, // el catálogo lo escribe con z
   { claves: ['coco'], gramos: 800 },
 ];
 
@@ -88,8 +88,11 @@ export const PESOS_REFERENCIA: PesoReferencia[] = [
  * granel y no en piezas contables.
  */
 const NO_CONTABLES = [
-  'uva', 'vainita', 'surtida', 'pasas', 'carbon', 'celery', 'perejil', 'cilantro',
+  'uva', 'vainita', 'surtida', 'pasa', 'carbon', 'celery', 'perejil', 'cilantro',
   'orejon', 'deshidratad', 'fileteada', 'pelada', 'picad', 'rallad', 'trocead',
+  // Procesados que empiezan por el nombre de una verdura: "Papas Fries 4Us
+  // congeladas" encabeza con "papas", pero son papas fritas en bolsa.
+  'fries', 'congelad', 'fritas', 'chips', 'pure', 'enlatad', 'conserva', 'encurtid',
 ];
 
 const CLAVE_AJUSTES = 'pesos-unitarios';
@@ -123,10 +126,41 @@ export function olvidarAjustePeso(nombreProducto: string) {
   } catch { /* noop */ }
 }
 
-/** ¿El producto se vende por kilo? Se detecta por el nombre del catálogo. */
+/**
+ * ¿El producto se cobra por peso?
+ *
+ * Además del "KG" explícito, cuenta la presentación de 1000 gramos o más:
+ * el catálogo lista así la verdura suelta —"Zanahoria 1000Gr", "Patilla
+ * 2000Gr"— usando el kilo como precio de referencia, no como envase cerrado.
+ */
 export function esPorKg(nombreProducto: string): boolean {
   const n = normalizeName(nombreProducto);
-  return /(^|\s)kg(\s|$)/.test(n) || /por kilo/.test(n) || /(^|\s)kilo(s)?(\s|$)/.test(n);
+  if (/(^|\s)kg(\s|$)/.test(n) || /por kilo/.test(n) || /(^|\s)kilo(s)?(\s|$)/.test(n)) return true;
+  // "1000gr", "2000 gr", "1600gr"…
+  const m = n.match(/(\d{4,})\s*(gr|g|gramos)(\s|$)/);
+  return m !== null && Number(m[1]) >= 1000;
+}
+
+/**
+ * Palabras que pueden preceder al nombre del producto sin cambiar qué es.
+ * "Papa Criolla Lavada" sigue siendo papa; "Bologna ... Pimentón" no es pimentón.
+ */
+function primeraPalabra(n: string): string {
+  return n.split(/[^a-z0-9]+/).filter(Boolean)[0] ?? '';
+}
+
+/**
+ * ¿La palabra clave encabeza el nombre del producto?
+ *
+ * Es la regla que separa la verdura real de los falsos positivos. Los nombres
+ * de frutería empiezan por el producto —"Tomate Perita KG", "Manzanas Rojas
+ * Importadas KG"— mientras que en "Bologna L Prado Pimentón y Aceituna KG" o
+ * "Orejón de Kiwi KG" la palabra aparece más adelante, porque el producto es
+ * otro. Se aceptan plurales.
+ */
+function encabeza(clave: string, nombreNorm: string): boolean {
+  const p = primeraPalabra(nombreNorm);
+  return p === clave || p === `${clave}s` || p === `${clave}es`;
 }
 
 /**
@@ -144,7 +178,10 @@ export function pesoUnitario(nombreProducto: string): { gramos: number; ajustado
   if (NO_CONTABLES.some(p => n.includes(p))) return null;
 
   for (const ref of PESOS_REFERENCIA) {
-    if (ref.claves.every(c => n.includes(c))) return { gramos: ref.gramos, ajustado: false };
+    // La primera clave debe encabezar el nombre; las demás solo estar presentes,
+    // porque describen la variedad ("tomate" + "perita").
+    if (!encabeza(ref.claves[0], n)) continue;
+    if (ref.claves.slice(1).every(c => n.includes(c))) return { gramos: ref.gramos, ajustado: false };
   }
   return null;
 }
@@ -152,15 +189,15 @@ export function pesoUnitario(nombreProducto: string): { gramos: number; ajustado
 /**
  * ¿Se puede convertir unidades a peso para este producto?
  *
- * Hacen falta tres condiciones, y la de categoría no es opcional: buscar solo
- * palabras dentro del nombre producía falsos positivos serios, como "Bologna
- * L Prado Pimentón y Aceituna KG" cruzando con "pimentón". Una mortadela no
- * se cuenta en piezas, y darle un peso estimado falsearía el total.
+ * Antes esto exigía además que `categorizeProduct` devolviera 'Frutas y
+ * Verduras', y resultó demasiado frágil: el categorizador manda "Manzanas
+ * Rojas Importadas KG" a 'Otros' y "Ciruela De La Colonia Tovar KG" a 'Higiene
+ * Personal', así que bloqueaba 19 de 53 productos legítimos. La regla de que
+ * la fruta encabece el nombre cumple la misma función —descartar la mortadela
+ * con pimentón— sin depender de un componente poco fiable.
  */
 export function admiteConversion(nombreProducto: string): boolean {
-  if (!esPorKg(nombreProducto)) return false;
-  if (categorizeProduct(nombreProducto) !== 'Frutas y Verduras') return false;
-  return pesoUnitario(nombreProducto) !== null;
+  return esPorKg(nombreProducto) && pesoUnitario(nombreProducto) !== null;
 }
 
 /** Kilos aproximados que representan N piezas. */
