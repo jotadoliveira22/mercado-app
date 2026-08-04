@@ -6,6 +6,7 @@ import { lookupBarcode } from '../utils/lookupBarcode';
 import { priceKeyCandidates } from '../utils/priceKey';
 import { fetchStorePrices, fetchCatalogoDeTienda } from '../hooks/useSync';
 import { mejorCoincidencia, type CandidatoCatalogo } from '../utils/matchProducto';
+import { cantidadFacturable, formatearPeso } from '../utils/pesosUnitarios';
 import BarcodeScanner from './BarcodeScanner';
 import NewProductModal from './NewProductModal';
 import StoreSelect from './StoreSelect';
@@ -133,7 +134,9 @@ export default function ShoppingList({ items, setItems, onMigrateToCart }: Props
     for (const item of items) {
       const p = priceOf(item);
       if (p === null) continue;
-      total += p.precio * (item.quantity ?? 1);
+      // Un producto por kilo se cobra por kilo aunque se cuente en piezas.
+      const { cantidad } = cantidadFacturable(item.name, item.quantity ?? 1, item.unit ?? 'Und');
+      total += p.precio * cantidad;
       withPrice++;
     }
     return { total, withPrice, missing: items.length - withPrice };
@@ -413,6 +416,7 @@ export default function ShoppingList({ items, setItems, onMigrateToCart }: Props
                     <ul>
                       {catItems.map((item, idx) => {
                         const resuelto = priceOf(item);
+                        const facturable = cantidadFacturable(item.name, item.quantity ?? 1, item.unit ?? 'Und');
                         return (
                         // La key va en el fragmento, no en el <li>: la fila
                         // puede renderizar dos elementos cuando se edita.
@@ -467,8 +471,15 @@ export default function ShoppingList({ items, setItems, onMigrateToCart }: Props
                                       resuelto.origen === 'catalogo' ? 'bg-blue-400' : 'bg-amber-400'
                                     }`}
                                   />
-                                  <span className={`text-sm font-bold ${item.checked ? 'text-gray-400' : 'text-green-700'}`}>
-                                    ${(resuelto.precio * (item.quantity ?? 1)).toFixed(2)}
+                                  <span className="text-right">
+                                    <span className={`block text-sm font-bold ${item.checked ? 'text-gray-400' : 'text-green-700'}`}>
+                                      ${(resuelto.precio * facturable.cantidad).toFixed(2)}
+                                    </span>
+                                    {facturable.kgEstimados !== null && (
+                                      <span className="block text-[10px] text-gray-400 leading-tight">
+                                        {formatearPeso(facturable.kgEstimados)}
+                                      </span>
+                                    )}
                                   </span>
                                 </span>
                               )}

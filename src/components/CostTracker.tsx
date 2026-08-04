@@ -4,6 +4,7 @@ import type { TrackerItem, ExchangeRates, Unit, SavedPurchase } from '../types';
 import { useExchangeRates } from '../hooks/useExchangeRates';
 import { pushPricesToComparative, fetchCatalogoDeTienda } from '../hooks/useSync';
 import { type CandidatoCatalogo } from '../utils/matchProducto';
+import { cantidadFacturable, formatearPeso } from '../utils/pesosUnitarios';
 
 interface Props {
   trackerItems: TrackerItem[];
@@ -98,7 +99,12 @@ export default function CostTracker({ trackerItems: items, setTrackerItems: setI
     }));
   };
 
-  const totalUSD = items.reduce((sum, i) => sum + i.quantity * i.unitPrice, 0);
+  // Un producto por kilo se cobra por kilo aunque el usuario lo cuente en
+  // piezas, así que la cantidad facturable puede no ser la que escribió.
+  const totalUSD = items.reduce(
+    (sum, i) => sum + cantidadFacturable(i.name, i.quantity, i.unit ?? 'Und').cantidad * i.unitPrice,
+    0,
+  );
   // Productos traídos de la Lista sin precio registrado, pendientes de completar.
   const missingPriceCount = items.filter(i => !(i.unitPrice > 0)).length;
   const totalBs = rates.bcv ? totalUSD * rates.bcv : null;
@@ -504,12 +510,23 @@ export default function CostTracker({ trackerItems: items, setTrackerItems: setI
                       </p>
                     )}
                   </div>
-                  <div className="text-right flex-shrink-0">
-                    <p className="font-bold text-green-700 text-sm">${(item.quantity * item.unitPrice).toFixed(2)}</p>
-                    {rates.bcv && (
-                      <p className="text-xs text-gray-400">Bs {formatBs(item.quantity * item.unitPrice, rates.bcv)}</p>
-                    )}
-                  </div>
+                  {(() => {
+                    const f = cantidadFacturable(item.name, item.quantity, item.unit ?? 'Und');
+                    const sub = f.cantidad * item.unitPrice;
+                    return (
+                      <div className="text-right flex-shrink-0">
+                        <p className="font-bold text-green-700 text-sm">${sub.toFixed(2)}</p>
+                        {f.kgEstimados !== null && (
+                          <p className="text-[10px] text-gray-400 leading-tight">
+                            {formatearPeso(f.kgEstimados)}
+                          </p>
+                        )}
+                        {rates.bcv && (
+                          <p className="text-xs text-gray-400">Bs {formatBs(sub, rates.bcv)}</p>
+                        )}
+                      </div>
+                    );
+                  })()}
                   <div className="flex gap-1 flex-shrink-0">
                     <button onClick={() => startEdit(item)} className="text-gray-400 hover:text-blue-500 p-1"><Edit2 size={14} /></button>
                     <button onClick={() => deleteItem(item.id)} className="text-gray-400 hover:text-red-400 p-1"><Trash2 size={14} /></button>
