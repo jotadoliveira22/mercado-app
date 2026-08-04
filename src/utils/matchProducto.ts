@@ -90,6 +90,60 @@ function posicion(palabra: string, tokensCandidato: string[]): number {
 }
 
 /**
+ * Sugerencias para el buscador, mientras el usuario escribe.
+ *
+ * A diferencia de `mejorCoincidencia`, aquí sí se aceptan palabras a medias:
+ * quien escribe "hari" espera ver "Harina Pan" antes de terminar. Por eso se
+ * busca por subcadena y no por palabra completa.
+ *
+ * El orden importa más que el filtro: con 5.000 productos, "leche" trae
+ * decenas, y lo útil es que las más parecidas aparezcan primero.
+ */
+export function buscarEnCatalogo(
+  consulta: string,
+  candidatos: CandidatoCatalogo[],
+  limite = 12,
+): CandidatoCatalogo[] {
+  const texto = normalizeName(consulta);
+  if (texto.length < 2) return [];
+  const buscadas = texto.split(/\s+/).filter(Boolean);
+
+  const puntuados: Array<{ c: CandidatoCatalogo; orden: number[] }> = [];
+
+  for (const candidato of candidatos) {
+    const nombre = candidato.nombreNorm;
+
+    // Todas las palabras escritas deben aparecer, aunque sea a medias.
+    let posiciones = 0;
+    let todas = true;
+    for (const palabra of buscadas) {
+      const i = nombre.indexOf(palabra);
+      if (i < 0) { todas = false; break; }
+      posiciones += i;
+    }
+    if (!todas) continue;
+
+    // Menor es mejor en cada criterio, en este orden:
+    //  1. el nombre empieza por lo escrito ("harina pan" → "Harina Pan ...")
+    //  2. alguna palabra del nombre empieza por lo escrito
+    //  3. cuánto hay que avanzar en el nombre para encontrar lo escrito
+    //  4. nombre más corto, que suele ser el producto base
+    const empiezaIgual = nombre.startsWith(texto) ? 0 : 1;
+    const empiezaPalabra = new RegExp(`(^|\\s)${texto.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`).test(nombre) ? 0 : 1;
+    puntuados.push({ c: candidato, orden: [empiezaIgual, empiezaPalabra, posiciones, nombre.length] });
+  }
+
+  puntuados.sort((a, b) => {
+    for (let i = 0; i < a.orden.length; i++) {
+      if (a.orden[i] !== b.orden[i]) return a.orden[i] - b.orden[i];
+    }
+    return 0;
+  });
+
+  return puntuados.slice(0, limite).map(p => p.c);
+}
+
+/**
  * Devuelve la mejor coincidencia del catálogo para un nombre, o null si
  * ninguna alcanza el umbral de confianza.
  */
