@@ -1,5 +1,5 @@
-import { useState, useMemo, useCallback, useRef } from 'react';
-import { Plus, Trash2, ChevronDown, ChevronRight, ShoppingCart, ScanLine, ShoppingBag, Loader, Search } from 'lucide-react';
+import { useState, useMemo, useCallback, useRef, Fragment } from 'react';
+import { Plus, Minus, Trash2, ChevronDown, ChevronRight, ShoppingCart, ScanLine, ShoppingBag, Loader, Search } from 'lucide-react';
 import type { ShoppingItem, Category, Unit } from '../types';
 import { categorizeProduct } from '../utils/categorize';
 import { lookupBarcode } from '../utils/lookupBarcode';
@@ -10,6 +10,16 @@ import BarcodeScanner from './BarcodeScanner';
 import NewProductModal from './NewProductModal';
 import StoreSelect from './StoreSelect';
 import BuscadorCatalogo from './BuscadorCatalogo';
+
+/** Paso de ajuste: 0,1 en Kg para pesos como 0,5; 1 en unidades. */
+function paso(unidad?: Unit): number {
+  return unidad === 'Kg' ? 0.1 : 1;
+}
+
+/** Evita los decimales largos de la suma en coma flotante (0,30000000000000004). */
+function redondear(n: number): number {
+  return parseFloat(n.toFixed(3));
+}
 
 /** Precio resuelto para un producto de la lista, con su procedencia. */
 interface PrecioResuelto {
@@ -71,6 +81,8 @@ export default function ShoppingList({ items, setItems, onMigrateToCart }: Props
   // Código del último escaneo, para guardarlo junto al producto.
   const [scannedBarcode, setScannedBarcode] = useState<string | undefined>(undefined);
   const [showBuscador, setShowBuscador] = useState(false);
+  // Producto cuya cantidad se está editando dentro de la lista.
+  const [editandoId, setEditandoId] = useState<string | null>(null);
 
   const [store, setStore] = useState('');
   const [prices, setPrices] = useState<Map<string, number>>(new Map());
@@ -177,7 +189,7 @@ export default function ShoppingList({ items, setItems, onMigrateToCart }: Props
    * que ya están en el formulario. El nombre queda idéntico al del catálogo,
    * así que el precio se resuelve de forma exacta y no por aproximación.
    */
-  const agregarDelCatalogo = (producto: CandidatoCatalogo) => {
+  const agregarDelCatalogo = (producto: CandidatoCatalogo, cantidad: number, unidad: Unit) => {
     setShowBuscador(false);
     setItems(prev => [...prev, {
       id: crypto.randomUUID(),
@@ -185,9 +197,15 @@ export default function ShoppingList({ items, setItems, onMigrateToCart }: Props
       category: categorizeProduct(producto.nombre),
       checked: false,
       createdAt: Date.now(),
-      quantity: parseFloat(quantity) || 1,
-      unit,
+      quantity: cantidad,
+      unit: unidad,
     }]);
+  };
+
+  /** Cambia la cantidad de un producto ya agregado. */
+  const cambiarCantidad = (id: string, cantidad: number, unidad: Unit) => {
+    setItems(prev => prev.map(i =>
+      i.id === id ? { ...i, quantity: cantidad, unit: unidad } : i));
   };
 
   const migrateToCart = () => {
@@ -233,6 +251,7 @@ export default function ShoppingList({ items, setItems, onMigrateToCart }: Props
           catalogo={catalogo}
           establecimiento={store}
           cargando={loadingPrices}
+          pedirCantidad
           onElegir={agregarDelCatalogo}
           onCerrar={() => setShowBuscador(false)}
         />
@@ -395,8 +414,10 @@ export default function ShoppingList({ items, setItems, onMigrateToCart }: Props
                       {catItems.map((item, idx) => {
                         const resuelto = priceOf(item);
                         return (
+                        // La key va en el fragmento, no en el <li>: la fila
+                        // puede renderizar dos elementos cuando se edita.
+                        <Fragment key={item.id}>
                         <li
-                          key={item.id}
                           className={`flex items-center gap-3 px-4 py-3 ${idx < catItems.length - 1 ? 'border-b border-gray-50' : ''}`}
                         >
                           <button
@@ -413,11 +434,17 @@ export default function ShoppingList({ items, setItems, onMigrateToCart }: Props
                           </button>
                           <span className={`flex-1 text-sm ${item.checked ? 'line-through text-gray-400' : 'text-gray-700'}`}>
                             {item.name}
-                            {(item.quantity || item.unit) && (
-                              <span className="ml-2 text-xs font-medium text-green-700 bg-green-50 px-1.5 py-0.5 rounded-full">
-                                {item.quantity ?? 1} {item.unit ?? 'Und'}
-                              </span>
-                            )}
+                            {/* Tocar la cantidad la vuelve editable. */}
+                            <button
+                              onClick={e => {
+                                e.stopPropagation();
+                                setEditandoId(editandoId === item.id ? null : item.id);
+                              }}
+                              className="ml-2 text-xs font-medium text-green-700 bg-green-50 hover:bg-green-100 px-1.5 py-0.5 rounded-full transition-colors"
+                              title="Cambiar cantidad"
+                            >
+                              {item.quantity ?? 1} {item.unit ?? 'Und'}
+                            </button>
                           </span>
                           {/* Precio del establecimiento. Si no está en la base
                               de datos se deja en blanco, nunca estimado. */}
@@ -454,6 +481,66 @@ export default function ShoppingList({ items, setItems, onMigrateToCart }: Props
                             <Trash2 size={16} />
                           </button>
                         </li>
+                        {editandoId === item.id && (
+                          <li className="px-4 py-2.5 bg-green-50 border-b border-gray-50 flex items-center gap-2">
+                            <button
+                              onClick={() => cambiarCantidad(
+                                item.id,
+                                Math.max(paso(item.unit), redondear((item.quantity ?? 1) - paso(item.unit))),
+                                item.unit ?? 'Und',
+                              )}
+                              className="w-8 h-8 rounded-lg bg-white border border-gray-300 text-gray-700 flex items-center justify-center active:bg-gray-100"
+                              aria-label="Quitar"
+                            >
+                              <Minus size={14} />
+                            </button>
+                            <input
+                              type="number"
+                              inputMode="decimal"
+                              min="0.1"
+                              step={item.unit === 'Kg' ? '0.1' : '1'}
+                              value={item.quantity ?? 1}
+                              onChange={e => {
+                                const n = parseFloat(e.target.value);
+                                if (Number.isFinite(n) && n > 0) {
+                                  cambiarCantidad(item.id, n, item.unit ?? 'Und');
+                                }
+                              }}
+                              className="w-16 border border-gray-300 rounded-lg px-2 py-1.5 text-sm text-center focus:outline-none focus:ring-2 focus:ring-green-500"
+                            />
+                            <button
+                              onClick={() => cambiarCantidad(
+                                item.id,
+                                redondear((item.quantity ?? 1) + paso(item.unit)),
+                                item.unit ?? 'Und',
+                              )}
+                              className="w-8 h-8 rounded-lg bg-white border border-gray-300 text-gray-700 flex items-center justify-center active:bg-gray-100"
+                              aria-label="Agregar"
+                            >
+                              <Plus size={14} />
+                            </button>
+                            <div className="flex rounded-lg overflow-hidden border border-gray-300 ml-1">
+                              {(['Und', 'Kg'] as const).map(u => (
+                                <button
+                                  key={u}
+                                  onClick={() => cambiarCantidad(item.id, item.quantity ?? 1, u)}
+                                  className={`px-2.5 py-1.5 text-xs font-medium transition-colors ${
+                                    (item.unit ?? 'Und') === u ? 'bg-green-700 text-white' : 'bg-white text-gray-600'
+                                  }`}
+                                >
+                                  {u}
+                                </button>
+                              ))}
+                            </div>
+                            <button
+                              onClick={() => setEditandoId(null)}
+                              className="ml-auto text-xs font-semibold text-green-700 px-2 py-1"
+                            >
+                              Listo
+                            </button>
+                          </li>
+                        )}
+                        </Fragment>
                         );
                       })}
                     </ul>
