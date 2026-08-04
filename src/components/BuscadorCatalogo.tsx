@@ -2,6 +2,7 @@ import { useState, useMemo, useRef, useEffect } from 'react';
 import { Search, X, Plus, Minus } from 'lucide-react';
 import { buscarEnCatalogo, type CandidatoCatalogo } from '../utils/matchProducto';
 import type { Unit } from '../types';
+import { admiteConversion, cantidadFacturable, formatearPeso, pesoUnitario, guardarAjustePeso } from '../utils/pesosUnitarios';
 
 interface Props {
   /** Catálogo del establecimiento, ya cargado en memoria. */
@@ -72,9 +73,32 @@ export default function BuscadorCatalogo({
   };
 
   const cantidadNum = parseFloat(cantidad);
-  const totalPrevisto = elegido && Number.isFinite(cantidadNum) && cantidadNum > 0
-    ? elegido.precio * cantidadNum
+  const valida = Number.isFinite(cantidadNum) && cantidadNum > 0;
+
+  // Un producto por kilo se cobra por kilo aunque se cuente en piezas: 4
+  // tomates a $2,45/Kg no cuestan $9,80 sino unos $0,88.
+  const facturable = elegido && valida
+    ? cantidadFacturable(elegido.nombre, cantidadNum, unidad)
     : null;
+  const totalPrevisto = elegido && facturable ? elegido.precio * facturable.cantidad : null;
+
+  const convierte = elegido ? admiteConversion(elegido.nombre) : false;
+  const referencia = elegido && convierte ? pesoUnitario(elegido.nombre) : null;
+
+  /** Guarda el peso real de una pieza que midió el usuario. */
+  const corregirPeso = () => {
+    if (!elegido || !referencia) return;
+    const txt = window.prompt(
+      `¿Cuánto pesa una unidad de "${elegido.nombre}"?\n\nEn gramos. Ahora se estima en ${referencia.gramos} g.`,
+      String(referencia.gramos),
+    );
+    if (txt === null) return;
+    const g = parseFloat(txt.replace(',', '.'));
+    if (!(g > 0)) return;
+    guardarAjustePeso(elegido.nombre, g);
+    // Se fuerza un repintado reasignando el producto elegido.
+    setElegido({ ...elegido });
+  };
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-60 z-50 flex flex-col items-center justify-start p-3 pt-8">
@@ -211,6 +235,31 @@ export default function BuscadorCatalogo({
                 </span>
               )}
             </div>
+
+            {/* Conversión de piezas a peso, para lo que se vende por Kg */}
+            {convierte && facturable?.kgEstimados != null && (
+              <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
+                <span className="text-xs text-amber-900 leading-snug flex-1">
+                  {formatearPeso(facturable.kgEstimados)} en total
+                  <span className="text-amber-700">
+                    {' · '}unos {referencia?.gramos} g por unidad
+                    {referencia?.ajustado ? ' (tu medida)' : ' (aproximado)'}
+                  </span>
+                </span>
+                <button
+                  onClick={corregirPeso}
+                  className="text-xs font-semibold text-amber-800 underline flex-shrink-0"
+                >
+                  Corregir
+                </button>
+              </div>
+            )}
+
+            {convierte && unidad === 'Kg' && (
+              <p className="text-[11px] text-gray-500 leading-snug">
+                Cambia a <strong>Und</strong> si prefieres contar piezas y que la app estime el peso.
+              </p>
+            )}
 
             <button
               onClick={confirmar}
