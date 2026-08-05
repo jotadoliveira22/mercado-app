@@ -19,6 +19,9 @@ package-lock.json
 !.env.example
 backups/
 
+# CSV generados por scripts/import-catalog.mjs para subir a Supabase
+catalogo_*.csv
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
