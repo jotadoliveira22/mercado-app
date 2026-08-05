@@ -19,12 +19,10 @@
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { categorizeProduct } from '../src/utils/categorize.ts';
 import { leerLibro, filasAObjetos } from './lib/xlsx-reader.mjs';
+import { claveProducto, num, transformar, publicarEnSupabase } from './lib/catalog-sync.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-
-const SUPABASE_URL = 'https://sjhvwraukqaebewytmln.supabase.co';
 
 // Hojas de catálogo. 'Resumen' y 'Diccionario de datos' no son datos.
 const SKIP_SHEETS = new Set(['Resumen', 'Diccionario de datos']);
@@ -38,32 +36,6 @@ const SKIP_SHEETS = new Set(['Resumen', 'Diccionario de datos']);
  */
 const TRATAR_TODO_COMO_USD = true;
 
-/**
- * Respaldo de categoría cuando `categorizeProduct` devuelve 'Otros'.
- *
- * El categorizador de la app deja 1.611 productos (27%) en 'Otros' porque no
- * reconoce familias como afeitado, depilatorias ni alimento de mascotas. En
- * esos casos la categoría del archivo es mejor que nada.
- *
- * Solo se mapean las equivalencias inequívocas. VÍVERES, REFRIGERADOS y
- * HOGAR Y TEMPORADA agrupan cosas muy distintas entre sí (VÍVERES incluye
- * desde pasta hasta bebidas), así que forzarlas a una sola de las 22
- * categorías de la app sería inventar precisión que el dato no tiene.
- */
-const CATEGORIA_RESPALDO = {
-  'CUIDADO PERSONAL': 'Higiene Personal',
-  'ARTÍCULOS DE LIMPIEZA': 'Limpieza',
-  'FRUTERÍA Y VEGETALES': 'Frutas y Verduras',
-  'LICORES': 'Bebidas',
-};
-
-/** Categoría de la app: el categorizador manda; el archivo es el respaldo. */
-function resolverCategoria(nombre, categoriaArchivo) {
-  const propia = categorizeProduct(nombre);
-  if (propia !== 'Otros') return propia;
-  return CATEGORIA_RESPALDO[String(categoriaArchivo ?? '').trim()] ?? 'Otros';
-}
-
 // ── Utilidades ───────────────────────────────────────────────────────────────
 
 function loadEnv() {
@@ -75,31 +47,6 @@ function loadEnv() {
     if (!m) continue;
     if (!(m[1] in process.env)) process.env[m[1]] = m[2].trim().replace(/^["']|["']$/g, '');
   }
-}
-
-function normalize(s) {
-  return String(s ?? '')
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-function slug(s) {
-  return normalize(s).replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-}
-
-/**
- * Fechas del archivo vienen como '2026-07-29 10:56:54' o con fracciones y
- * ' UTC'. Algunas hojas las guardan como fecha real de Excel, así que llegan
- * como Date: hay que cubrir ambos casos o se pierden filas en silencio.
- */
-function parseFecha(raw) {
-  if (raw instanceof Date) return isNaN(raw.getTime()) ? null : raw.toISOString();
-  const s = String(raw ?? '').replace(' UTC', '').trim();
-  const d = new Date(s.replace(' ', 'T') + (/[Zz]|[+-]\d\d:?\d\d$/.test(s) ? '' : 'Z'));
-  return isNaN(d.getTime()) ? null : d.toISOString();
 }
 
 /**
@@ -117,29 +64,6 @@ function esUtilizable(r) {
     Number.isFinite(precio) &&
     precio > 0
   );
-}
-
-/**
- * Clave que une un producto con sus precios dentro de este script.
- *
- * Existe como funcion unica a proposito: antes se construia en tres lugares por
- * separado y una copia uso un separador distinto, asi que ninguna fila cruzaba
- * y el CSV salia vacio. El delimitador es visible para que una divergencia asi
- * se note al leer el codigo.
- */
-function claveProducto(retailerId, claveFuente) {
-  return `${retailerId}|${claveFuente}`;
-}
-
-/**
- * Número o null. El caso vacío se descarta ANTES de convertir porque
- * `Number('')` y `Number(null)` dan 0: sin esta guarda, un precio de oferta
- * ausente se guardaba como $0 en vez de quedar nulo.
- */
-function num(v) {
-  if (v === null || v === undefined || v === '') return null;
-  const n = Number(v);
-  return Number.isFinite(n) ? n : null;
 }
 
 // ── Depuración del formato consolidado ───────────────────────────────────────
@@ -265,107 +189,15 @@ function leerFilas(rutaXlsx) {
   return { filas, omitidas, formato };
 }
 
-// ── Transformación ───────────────────────────────────────────────────────────
-
-function transformar(filas) {
-  const retailers = new Map();
-  const branches = new Map();
-  const products = new Map(); // clave: claveProducto(retailerId, claveFuente)
-  const precios = [];
-
-  for (const r of filas) {
-    const retailerId = slug(r['Supermercado']);
-    const branchId = `${retailerId}:${slug(r['Sucursal'])}`;
-
-    retailers.set(retailerId, {
-      id: retailerId,
-      nombre: String(r['Supermercado']).trim(),
-      // Los nombres del archivo coinciden con los del selector de la app tras
-      // renombrar El Plaza → Automercados Plaza y agregar Luvebras.
-      app_store_name: String(r['Supermercado']).trim(),
-      activo: true,
-    });
-
-    branches.set(branchId, {
-      id: branchId,
-      retailer_id: retailerId,
-      nombre: String(r['Sucursal']).trim(),
-      fuente_url: r['Fuente'] ?? null,
-    });
-
-    const nombre = String(r['Nombre del producto']).trim();
-    const nombreNorm = normalize(nombre);
-    // 525 filas (PedidosYa) no exponen SKU; se identifican por nombre para que
-    // el mismo producto no se duplique entre sucursales.
-    const sku = r['SKU'] ? String(r['SKU']).trim() : null;
-    const claveFuente = sku ?? nombreNorm;
-    const pk = claveProducto(retailerId, claveFuente);
-
-    if (!products.has(pk)) {
-      products.set(pk, {
-        retailer_id: retailerId,
-        clave_fuente: claveFuente,
-        sku,
-        id_producto_web: r['ID producto web'] ? String(r['ID producto web']) : null,
-        nombre,
-        nombre_normalizado: nombreNorm,
-        presentacion: r['Presentación'] ?? null,
-        categoria_fuente: r['Categoría original'] ?? null,
-        categoria_estandar: r['Categoría estandarizada'] ?? null,
-        // Se reclasifica con el categorizador de la app para que la Comparativa
-        // use las mismas 22 categorías que ve el usuario en el resto de la app.
-        categoria_app: resolverCategoria(nombre, r['Categoría estandarizada']),
-        barcode: null, // los SKU no son EAN; se llenará con el tiempo
-        url_producto: r['URL del producto'] ?? null,
-        url_imagen: r['URL de imagen'] ?? null,
-      });
-    }
-
-    const fecha = parseFecha(r['Fecha de extracción']);
-    if (!fecha) continue;
-
-    precios.push({
-      _pk: pk,
-      // Datos del producto TAL COMO VIENEN EN ESTA FILA, para el volcado a CSV.
-      // No se reusan los del producto deduplicado porque varios campos son
-      // propios de la sucursal: la URL del producto, por ejemplo, cambia entre
-      // Bello Monte y Plaza Las Americas aunque el SKU sea el mismo.
-      _fila: {
-        nombre,
-        nombre_normalizado: nombreNorm,
-        id_producto_web: r['ID producto web'] ? String(r['ID producto web']) : null,
-        presentacion: r['Presentación'] ?? null,
-        categoria_fuente: r['Categoría original'] ?? null,
-        categoria_estandar: r['Categoría estandarizada'] ?? null,
-        categoria_app: resolverCategoria(nombre, r['Categoría estandarizada']),
-        url_producto: r['URL del producto'] ?? null,
-        url_imagen: r['URL de imagen'] ?? null,
-      },
-      branch_id: branchId,
-      precio_usd: num(r['Precio actual']),
-      precio_regular: num(r['Precio regular']),
-      precio_oferta: num(r['Precio oferta']),
-      descuento_pct: num(r['Descuento']),
-      moneda_fuente: r['Moneda fuente'] ?? null,
-      disponible: r['Disponible'] === 'Sí' ? true : r['Disponible'] === 'No' ? false : null,
-      estado_stock: r['Estado stock'] ?? null,
-      calidad: r['Calidad del dato'] ?? null,
-      observaciones: r['Observaciones'] ?? null,
-      fecha_extraccion: fecha,
-    });
-  }
-
-  return { retailers: [...retailers.values()], branches: [...branches.values()], products: [...products.values()], precios };
-}
-
 // ── Salida a CSV (camino sin terminal) ───────────────────────────────────────
 //
 // Genera un CSV plano para subirlo con el importador de Supabase y repartirlo
 // con db/catalog_load_from_staging.sql. Sirve cuando no hay Node instalado en
 // la máquina de quien importa, y evita tener que exponer la service role key.
 //
-// Reusa `transformar()` a propósito: tener una segunda implementación de la
-// transformación ya causó una vez que se perdieran 762 filas en silencio.
+// Reusa `transformar()` de catalog-sync.mjs a propósito: tener una segunda
+// implementación de la transformación ya causó una vez que se perdieran 762
+// filas en silencio.
 
 const COLUMNAS_CSV = [
   'retailer_id', 'retailer_nombre', 'branch_id', 'branch_nombre', 'fuente_url',
@@ -403,17 +235,15 @@ function generarCsv({ retailers, branches, products, precios }) {
       fuente_url: b?.fuente_url,
       clave_fuente: p.clave_fuente,
       sku: p.sku,
-      // Campos propios de la fila: la deduplicación la hace la PARTE 2 del SQL,
-      // así el CSV es un volcado fiel de lo que publicó cada sucursal.
-      id_producto_web: pr._fila.id_producto_web,
-      nombre: pr._fila.nombre,
-      nombre_normalizado: pr._fila.nombre_normalizado,
-      presentacion: pr._fila.presentacion,
-      categoria_fuente: pr._fila.categoria_fuente,
-      categoria_estandar: pr._fila.categoria_estandar,
-      categoria_app: pr._fila.categoria_app,
-      url_producto: pr._fila.url_producto,
-      url_imagen: pr._fila.url_imagen,
+      id_producto_web: p.id_producto_web,
+      nombre: p.nombre,
+      nombre_normalizado: p.nombre_normalizado,
+      presentacion: p.presentacion,
+      categoria_fuente: p.categoria_fuente,
+      categoria_estandar: p.categoria_estandar,
+      categoria_app: p.categoria_app,
+      url_producto: p.url_producto,
+      url_imagen: p.url_imagen,
       precio_usd: pr.precio_usd,
       precio_regular: pr.precio_regular,
       precio_oferta: pr.precio_oferta,
@@ -429,37 +259,6 @@ function generarCsv({ retailers, branches, products, precios }) {
   }
   // BOM para que Excel abra los acentos correctamente.
   return '﻿' + lineas.join('\n') + '\n';
-}
-
-// ── Escritura en Supabase ────────────────────────────────────────────────────
-
-async function sbRequest(path, { method = 'POST', body, headers = {}, key }) {
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
-    method,
-    headers: {
-      apikey: key,
-      Authorization: `Bearer ${key}`,
-      'Content-Type': 'application/json',
-      ...headers,
-    },
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  const text = await res.text();
-  if (!res.ok) throw new Error(`${path} → HTTP ${res.status}: ${text.slice(0, 300)}`);
-  return text ? JSON.parse(text) : null;
-}
-
-async function upsertEnLotes(tabla, filas, conflicto, key, lote = 500) {
-  for (let i = 0; i < filas.length; i += lote) {
-    const chunk = filas.slice(i, i + lote);
-    await sbRequest(`${tabla}?on_conflict=${conflicto}`, {
-      body: chunk,
-      key,
-      headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
-    });
-    process.stdout.write(`\r   ${tabla}: ${Math.min(i + lote, filas.length)}/${filas.length}`);
-  }
-  process.stdout.write('\n');
 }
 
 // ── Main ─────────────────────────────────────────────────────────────────────
@@ -551,38 +350,9 @@ async function main() {
   }
 
   console.log('\n📤 Escribiendo en Supabase...');
-  await upsertEnLotes('catalog_retailers', retailers, 'id', key);
-  await upsertEnLotes('catalog_branches', branches, 'id', key);
-  await upsertEnLotes('catalog_products', products, 'retailer_id,clave_fuente', key);
+  const resultado = await publicarEnSupabase({ retailers, branches, products, precios }, key);
 
-  // Los precios necesitan el id del producto, que lo asigna la base.
-  console.log('   resolviendo ids de productos...');
-  const idPorClave = new Map();
-  const PAGE = 1000;
-  for (let page = 0; ; page++) {
-    const data = await sbRequest(
-      `catalog_products?select=id,retailer_id,clave_fuente&limit=${PAGE}&offset=${page * PAGE}`,
-      { method: 'GET', key }
-    );
-    for (const row of data) idPorClave.set(claveProducto(row.retailer_id, row.clave_fuente), row.id);
-    if (data.length < PAGE) break;
-  }
-
-  const filasPrecio = [];
-  let huerfanos = 0;
-  for (const p of precios) {
-    const id = idPorClave.get(p._pk);
-    if (!id) { huerfanos++; continue; }
-    // _pk y _fila son auxiliares del script: PostgREST rechazaría columnas
-    // que no existen en la tabla.
-    const { _pk, _fila, ...resto } = p;
-    filasPrecio.push({ product_id: id, ...resto });
-  }
-  if (huerfanos > 0) console.log(`   ⚠️  ${huerfanos} precios sin producto asociado (se omiten)`);
-
-  await upsertEnLotes('catalog_prices', filasPrecio, 'product_id,branch_id,fecha_extraccion', key);
-
-  console.log(`\n🎉 Importación completa: ${products.length} productos, ${filasPrecio.length} precios.`);
+  console.log(`\n🎉 Importación completa: ${resultado.productos} productos, ${resultado.precios} precios.`);
 }
 
 main().catch(err => {
