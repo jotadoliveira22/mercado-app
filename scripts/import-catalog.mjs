@@ -142,12 +142,108 @@ function num(v) {
   return Number.isFinite(n) ? n : null;
 }
 
+// ── Depuración del formato consolidado ───────────────────────────────────────
+
+/**
+ * Prefijos técnicos que la fuente antepone a algunos nombres: "//Amlodipino",
+ * "!!Base Monreve". No son parte del nombre y estorban al buscar.
+ */
+function limpiarNombre(nombre) {
+  return String(nombre ?? '').replace(/^[^\p{L}\p{N}]+/u, '').trim();
+}
+
+/**
+ * Precio redondeado a céntimos, o null si no es utilizable.
+ *
+ * Farmatodo llega con el 100% de los precios sin redondear —$24.23242831768587—
+ * porque la fuente divide entre una tasa de cambio y no ajusta. Las otras
+ * cadenas vienen con dos decimales.
+ *
+ * Además hay un valor centinela, 0.00001335487920511759, repetido 207 veces en
+ * productos sin relación entre sí (un antihipertensivo, galletas Oreo, un
+ * cortaúñas). No es un precio sino una marca de "sin dato", así que todo lo que
+ * redondee por debajo de un céntimo se descarta.
+ */
+function precioDepurado(valor) {
+  const n = num(valor);
+  if (n === null || !(n > 0)) return null;
+  const redondeado = Math.round(n * 100) / 100;
+  return redondeado >= 0.01 ? redondeado : null;
+}
+
+/**
+ * Categorías de Farmatodo que se importan.
+ *
+ * Es una farmacia: 8.397 de sus 10.515 productos son cuidado personal y
+ * medicinas, que no se comparan contra un supermercado. Se traen los víveres,
+ * la limpieza y los refrigerados —carnes, lácteos y huevos—, que sí son
+ * comparables.
+ */
+const FARMATODO_CATEGORIAS = new Set(['VÍVERES', 'ARTÍCULOS DE LIMPIEZA', 'REFRIGERADOS']);
+
 // ── Lectura del Excel ────────────────────────────────────────────────────────
+
+/**
+ * Detecta el formato del archivo.
+ *
+ * El consolidado (v10 en adelante) trae una hoja "Base general" con todas las
+ * cadenas y las columnas ya declaradas en USD. El formato anterior repartía las
+ * cadenas en una hoja por sucursal.
+ */
+function detectarFormato(libro) {
+  return 'Base general' in libro ? 'consolidado' : 'por-hojas';
+}
 
 function leerFilas(rutaXlsx) {
   const libro = leerLibro(rutaXlsx);
+  const formato = detectarFormato(libro);
   const filas = [];
-  const omitidas = { parcial: 0, sinPrecio: 0 };
+  const omitidas = { parcial: 0, sinPrecio: 0, precioRoto: 0, farmaciaNoComparable: 0 };
+
+  if (formato === 'consolidado') {
+    for (const r of filasAObjetos(libro['Base general'], 3)) {
+      const nombre = limpiarNombre(r['Nombre del producto']);
+      const sku = r['SKU'] ? String(r['SKU']).trim() : '';
+      if (!nombre && !sku) continue;
+      if (!nombre || nombre.toUpperCase().includes('SIN NOMBRE')) { omitidas.parcial++; continue; }
+
+      const precio = precioDepurado(r['Precio actual (USD)']);
+      if (precio === null) { omitidas.precioRoto++; continue; }
+
+      const cadena = String(r['Establecimiento'] ?? '').trim();
+      const categoria = String(r['Categoría estandarizada'] ?? '').trim();
+      if (cadena === 'Farmatodo' && !FARMATODO_CATEGORIAS.has(categoria)) {
+        omitidas.farmaciaNoComparable++;
+        continue;
+      }
+
+      filas.push({
+        'Supermercado': cadena,
+        'Sucursal': r['Sucursal'],
+        'SKU': sku || null,
+        'ID producto web': null,
+        'Nombre del producto': nombre,
+        'Presentación': r['Presentación'],
+        'Precio actual': precio,
+        'Precio regular': precioDepurado(r['Precio regular (USD)']),
+        'Precio oferta': precioDepurado(r['Precio oferta (USD)']),
+        'Descuento': null,
+        'Moneda fuente': 'USD',
+        'Disponible': r['Disponible'],
+        'Estado stock': r['Estado stock'],
+        'Categoría original': r['Categoría original'],
+        'Categoría estandarizada': categoria,
+        'Calidad del dato': r['Calidad del dato'],
+        'Observaciones': null,
+        'URL del producto': r['URL del producto'],
+        'URL de imagen': null,
+        'Fecha de extracción': r['Fecha de extracción'],
+        'Fuente': r['Fuente'],
+        _hoja: 'Base general',
+      });
+    }
+    return { filas, omitidas, formato };
+  }
 
   for (const [nombreHoja, filasHoja] of Object.entries(libro)) {
     if (SKIP_SHEETS.has(nombreHoja)) continue;
@@ -166,7 +262,7 @@ function leerFilas(rutaXlsx) {
       filas.push({ ...r, _hoja: nombreHoja });
     }
   }
-  return { filas, omitidas };
+  return { filas, omitidas, formato };
 }
 
 // ── Transformación ───────────────────────────────────────────────────────────
@@ -375,7 +471,11 @@ async function main() {
   const dryRun = args.includes('--dry-run');
   const iCsv = args.indexOf('--csv');
   const rutaCsv = iCsv >= 0 ? args[iCsv + 1] : null;
-  const ruta = args.filter((a, i) => !a.startsWith('--') && i !== iCsv + 1)[0];
+  // El índice a saltar es el valor de --csv, y solo si la opción está presente:
+  // con `indexOf` devolviendo -1, `iCsv + 1` da 0 y se descartaba el primer
+  // argumento, que es precisamente la ruta del archivo.
+  const saltar = iCsv >= 0 ? iCsv + 1 : -1;
+  const ruta = args.filter((a, i) => !a.startsWith('--') && i !== saltar)[0];
 
   if (!ruta) {
     console.error(
@@ -396,12 +496,16 @@ async function main() {
   }
 
   console.log(`📖 Leyendo ${ruta}\n`);
-  const { filas, omitidas } = leerFilas(ruta);
+  const { filas, omitidas, formato } = leerFilas(ruta);
   const { retailers, branches, products, precios } = transformar(filas);
 
+  console.log(`   Formato detectado : ${formato}`);
   console.log(`   Filas utilizables : ${filas.length}`);
-  console.log(`   Omitidas (PARCIAL): ${omitidas.parcial}`);
-  console.log(`   Omitidas (precio) : ${omitidas.sinPrecio}`);
+  console.log(`   Omitidas (sin nombre) : ${omitidas.parcial}`);
+  console.log(`   Omitidas (precio)     : ${omitidas.sinPrecio + omitidas.precioRoto}`);
+  if (omitidas.farmaciaNoComparable) {
+    console.log(`   Omitidas (farmacia no comparable): ${omitidas.farmaciaNoComparable}`);
+  }
   console.log(`\n   Cadenas    : ${retailers.length}`);
   console.log(`   Sucursales : ${branches.length}`);
   console.log(`   Productos  : ${products.length}`);

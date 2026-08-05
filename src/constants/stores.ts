@@ -2,7 +2,7 @@
 // CostTracker.tsx y Comparativa.tsx, lo que hacía fácil que se desincronizaran.
 
 export const STORES = [
-  'Supermercado Gama', 'Automercados Plaza', 'Central Madeirense',
+  'Gama', 'Automercados Plaza', 'Central Madeirense',
   'Unicasa', 'Luvebras', 'Rio Vida', 'Supermercados RIO', 'Farmatodo',
   'Supermercado Forum', 'Supermercado Luz', 'Supermercado Páramo',
 ];
@@ -10,10 +10,12 @@ export const STORES = [
 /**
  * Nombres antiguos que cambiaron. Se usa para que los precios y compras ya
  * guardados con el nombre viejo sigan reconociéndose en la app hasta que la
- * migración de datos (db/rename_el_plaza.sql) se haya aplicado.
+ * migración de datos (db/rename_el_plaza.sql, db/rename_gama.sql) se haya
+ * aplicado.
  */
 export const STORE_ALIASES: Record<string, string> = {
   'Supermercado El Plaza': 'Automercados Plaza',
+  'Supermercado Gama': 'Gama',
 };
 
 /** Devuelve el nombre vigente de un establecimiento. */
