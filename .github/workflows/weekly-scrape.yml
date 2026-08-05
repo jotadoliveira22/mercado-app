@@ -1,0 +1,33 @@
+name: Actualizar catálogo de precios (semanal)
+
+on:
+  schedule:
+    # Lunes 8:00 UTC = 4:00 am Venezuela.
+    - cron: '0 8 * * 1'
+  workflow_dispatch: {}
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - run: npm ci
+
+      - name: Correr scrapers y publicar en Supabase
+        env:
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: npm run scrape
+
+      - name: Subir respaldo de la corrida
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: scrape-backup-${{ github.run_id }}
+          path: backups/
+          retention-days: 30
