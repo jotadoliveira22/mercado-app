@@ -17,7 +17,9 @@ jobs:
         with:
           node-version: 20
 
-      - run: npm ci
+      # No se usa `npm ci`: el proyecto no versiona package-lock.json
+      # (.gitignore), así que `ci` fallaría de inmediato por falta de lockfile.
+      - run: npm install
 
       - name: Correr scrapers y publicar en Supabase
         env:
