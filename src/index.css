@@ -14,6 +14,24 @@
   --color-brand-dark-active: #081f0a;
 }
 
+/**
+ * Bloquea el rebote nativo de scroll de la página (el "rubber-band" de
+ * Safari/iOS): sin esto, arrastrar dentro de la app puede mover la página
+ * completa (encabezado y nav incluidos) y dejar ver un hueco en blanco al
+ * llegar al límite, aunque el CSS interno de cada pantalla esté bien armado.
+ * Con html/body fijos y sin scroll propio, el único que se mueve es el
+ * contenedor de lista de cada pantalla (su propio overflow-y-auto).
+ */
+html, body {
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
 body {
   background-color: var(--color-brand-lime);
+}
+
+#root {
+  height: 100%;
 }

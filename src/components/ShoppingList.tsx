@@ -386,7 +386,7 @@ export default function ShoppingList({ items, setItems, onMigrateToCart }: Props
       </div>
 
       {/* List */}
-      <div className="flex-1 min-h-0 overflow-y-auto px-4 py-3 space-y-3 bg-brand-lime-soft">
+      <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-4 py-3 space-y-3 bg-brand-lime-soft">
         {items.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-gray-400 gap-3 py-16">
             <ShoppingCart size={48} strokeWidth={1} />
