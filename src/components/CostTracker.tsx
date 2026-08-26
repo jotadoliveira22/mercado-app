@@ -21,6 +21,7 @@ import BarcodeScanner from './BarcodeScanner';
 import NewProductModal from './NewProductModal';
 import StoreSelect from './StoreSelect';
 import BuscadorCatalogo from './BuscadorCatalogo';
+import FotoProducto from './FotoProducto';
 
 type CasheaRate = 20 | 40;
 
@@ -534,7 +535,7 @@ export default function CostTracker({ trackerItems: items, setTrackerItems: setI
       </div>
 
       {/* Items list */}
-      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2 bg-brand-lime-soft">
+      <div className="flex-1 min-h-0 overflow-y-auto px-4 py-3 space-y-2 bg-brand-lime-soft">
         {items.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-gray-400 gap-3 py-16">
             <DollarSign size={48} strokeWidth={1} />
@@ -579,6 +580,15 @@ export default function CostTracker({ trackerItems: items, setTrackerItems: setI
                 </div>
               ) : (
                 <div className="flex items-center gap-3">
+                  {/* Solo se muestra si hay foto: sin coincidencia, un ícono
+                      vacío en cada fila sería más ruido que ayuda. */}
+                  {selectedStore && mejorCoincidencia(item.name, catalogo)?.candidato.urlImagen && (
+                    <FotoProducto
+                      url={mejorCoincidencia(item.name, catalogo)!.candidato.urlImagen}
+                      alt={item.name}
+                      size={40}
+                    />
+                  )}
                   <div className="flex-1 min-w-0">
                     <p className="font-medium text-gray-800 text-sm truncate">{item.name}</p>
                     {item.unitPrice === 0 ? (
