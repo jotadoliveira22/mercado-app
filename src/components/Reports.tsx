@@ -289,7 +289,7 @@ export default function Reports({ savedPurchases: purchases }: Props) {
         </div>
       </div>
 
-      <div className="flex-1 min-h-0 overflow-y-auto bg-brand-lime-soft">
+      <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain bg-brand-lime-soft">
         {/* Calendario */}
         <div className="bg-white mx-4 mt-4 rounded-2xl shadow-sm border border-gray-100 p-4">
           <div className="flex items-center justify-between mb-3">
