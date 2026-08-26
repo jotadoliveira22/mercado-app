@@ -195,6 +195,8 @@ export interface HitPrecio {
   nombre: string;
   precioUsd: number;
   presentacion?: string | null;
+  /** Solo disponible para hits de catálogo; los aportes de la comunidad no traen foto. */
+  urlImagen?: string | null;
 }
 
 const LIMITE_BUSQUEDA = 40;
@@ -231,7 +233,7 @@ export async function buscarPrecios(texto: string): Promise<HitPrecio[]> {
   const [catalogo, respuestasComunidad] = await Promise.all([
     supabase
       .from('catalog_precio_vigente')
-      .select('store,nombre,precio_usd,presentacion')
+      .select('store,nombre,precio_usd,presentacion,url_imagen')
       .ilike('nombre_normalizado', `%${termino}%`)
       .order('precio_usd', { ascending: true })
       .limit(LIMITE_BUSQUEDA),
@@ -252,6 +254,7 @@ export async function buscarPrecios(texto: string): Promise<HitPrecio[]> {
       nombre: r.nombre,
       precioUsd: r.precio_usd,
       presentacion: r.presentacion,
+      urlImagen: r.url_imagen,
     });
   }
 
@@ -295,7 +298,7 @@ export async function fetchCatalogoDeTienda(store: string): Promise<CandidatoCat
   for (let page = 0; ; page++) {
     const { data, error } = await supabase
       .from('catalog_precio_vigente')
-      .select('nombre,nombre_normalizado,precio_usd,presentacion')
+      .select('nombre,nombre_normalizado,precio_usd,presentacion,url_imagen')
       .eq('store', store)
       .range(page * PAGE, (page + 1) * PAGE - 1);
     if (error) { console.error('fetch catálogo:', error); return out; }
@@ -306,6 +309,7 @@ export async function fetchCatalogoDeTienda(store: string): Promise<CandidatoCat
         nombreNorm: r.nombre_normalizado,
         precio: r.precio_usd,
         presentacion: r.presentacion,
+        urlImagen: r.url_imagen,
       });
     }
     if (data.length < PAGE) break;

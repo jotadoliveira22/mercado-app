@@ -3,6 +3,7 @@ import { Search, X, Plus, Minus } from 'lucide-react';
 import { buscarEnCatalogo, type CandidatoCatalogo } from '../utils/matchProducto';
 import type { Unit } from '../types';
 import { admiteConversion, cantidadFacturable, formatearPeso, pesoUnitario, guardarAjustePeso } from '../utils/pesosUnitarios';
+import FotoProducto from './FotoProducto';
 
 interface Props {
   /** Catálogo del establecimiento, ya cargado en memoria. */
@@ -157,6 +158,7 @@ export default function BuscadorCatalogo({
               onClick={() => tocarSugerencia(s)}
               className="w-full text-left px-4 py-3 border-b border-gray-50 hover:bg-green-50 active:bg-green-100 transition-colors flex items-center gap-3"
             >
+              <FotoProducto url={s.urlImagen} alt={s.nombre} />
               <div className="flex-1 min-w-0">
                 <p className="text-sm text-gray-800 leading-snug">{s.nombre}</p>
                 {s.presentacion && (
@@ -174,12 +176,15 @@ export default function BuscadorCatalogo({
         {elegido && (
           <div className="flex-shrink-0 border-t border-gray-200 bg-gray-50 px-4 py-3 space-y-3">
             <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0">
-                <p className="text-sm font-semibold text-gray-800 leading-snug">{elegido.nombre}</p>
-                <p className="text-xs text-gray-500 mt-0.5">
-                  ${elegido.precio.toFixed(2)}
-                  {elegido.presentacion ? ` · ${elegido.presentacion}` : ''}
-                </p>
+              <div className="flex items-start gap-2 min-w-0">
+                <FotoProducto url={elegido.urlImagen} alt={elegido.nombre} size={40} />
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-gray-800 leading-snug">{elegido.nombre}</p>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    ${elegido.precio.toFixed(2)}
+                    {elegido.presentacion ? ` · ${elegido.presentacion}` : ''}
+                  </p>
+                </div>
               </div>
               <button
                 onClick={() => setElegido(null)}

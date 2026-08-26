@@ -158,6 +158,7 @@ SELECT DISTINCT ON (p.id)
   p.nombre_normalizado,
   p.presentacion,
   p.categoria_app,
+  p.url_imagen,
   pr.precio_usd,
   pr.disponible,
   pr.calidad,
