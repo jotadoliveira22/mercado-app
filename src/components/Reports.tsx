@@ -252,11 +252,11 @@ export default function Reports({ savedPurchases: purchases }: Props) {
 
   if (purchases.length === 0) {
     return (
-      <div className="flex flex-col h-full">
+      <div className="flex flex-col h-full overflow-y-auto overscroll-contain">
         <div className="bg-brand-dark-hover px-4 pt-3 pb-4">
           <h2 className="text-white font-bold text-lg">Reportes</h2>
         </div>
-        <div className="flex flex-col items-center justify-center flex-1 text-gray-400 gap-3 bg-brand-lime-soft">
+        <div className="flex flex-col items-center justify-center text-gray-400 gap-3 bg-brand-lime-soft py-24">
           <BarChart2 size={48} strokeWidth={1} />
           <p className="text-base">Sin compras guardadas</p>
           <p className="text-sm text-center px-8">Guarda tu primera compra desde la Calculadora</p>
@@ -266,9 +266,9 @@ export default function Reports({ savedPurchases: purchases }: Props) {
   }
 
   return (
-    <div className="flex flex-col h-full">
-      {/* Header */}
-      <div className="bg-brand-dark-hover px-4 pt-3 pb-4 flex-shrink-0 space-y-3">
+    <div className="flex flex-col h-full overflow-y-auto overscroll-contain">
+      {/* Header: se desplaza junto con el contenido, no queda fijo. */}
+      <div className="bg-brand-dark-hover px-4 pt-3 pb-4 space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="text-white font-bold text-lg">Reportes</h2>
           <div className="bg-white rounded-full px-3 py-1 shadow-sm">
@@ -289,7 +289,7 @@ export default function Reports({ savedPurchases: purchases }: Props) {
         </div>
       </div>
 
-      <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain bg-brand-lime-soft">
+      <div className="bg-brand-lime-soft">
         {/* Calendario */}
         <div className="bg-white mx-4 mt-4 rounded-2xl shadow-sm border border-gray-100 p-4">
           <div className="flex items-center justify-between mb-3">

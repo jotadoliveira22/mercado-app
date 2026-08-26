@@ -248,7 +248,7 @@ export default function ShoppingList({ items, setItems, onMigrateToCart }: Props
   };
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full overflow-y-auto overscroll-contain">
       {showScanner && (
         <BarcodeScanner onScan={handleScan} onClose={() => setShowScanner(false)} />
       )}
@@ -385,10 +385,12 @@ export default function ShoppingList({ items, setItems, onMigrateToCart }: Props
         </div>
       </div>
 
-      {/* List */}
-      <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-4 py-3 space-y-3 bg-brand-lime-soft">
+      {/* List: se desplaza junto con el encabezado y los totales de arriba,
+          no en un recuadro aparte — así bajar deja ver más productos y
+          subir vuelve a mostrar el resumen, como lo pidió el usuario. */}
+      <div className="px-4 py-3 space-y-3 bg-brand-lime-soft">
         {items.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-gray-400 gap-3 py-16">
+          <div className="flex flex-col items-center justify-center text-gray-400 gap-3 py-16">
             <ShoppingCart size={48} strokeWidth={1} />
             <p className="text-base">Tu lista está vacía</p>
             <p className="text-sm">Agrega productos manualmente o escanea un código</p>

@@ -538,9 +538,9 @@ export default function Comparativa() {
   const [mode, setMode] = useState<CompareMode>('proporciones');
 
   return (
-    <div className="flex flex-col h-full">
-      {/* Header */}
-      <div className="bg-brand-dark-hover px-4 pt-3 pb-4 flex-shrink-0 space-y-3">
+    <div className="flex flex-col h-full overflow-y-auto overscroll-contain">
+      {/* Header: se desplaza junto con el contenido, no queda fijo. */}
+      <div className="bg-brand-dark-hover px-4 pt-3 pb-4 space-y-3">
         <h2 className="text-white font-bold text-lg">Comparativa</h2>
         {/* Selector de modo */}
         <div className="flex bg-green-900 bg-opacity-60 rounded-xl p-1 gap-1">
@@ -560,7 +560,7 @@ export default function Comparativa() {
       </div>
 
       {/* Contenido */}
-      <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-4 py-4 bg-brand-lime-soft">
+      <div className="px-4 py-4 bg-brand-lime-soft">
         {mode === 'proporciones' ? <PropComparison /> : <PriceComparison />}
       </div>
     </div>

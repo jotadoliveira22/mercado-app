@@ -285,8 +285,10 @@ export default function CostTracker({ trackerItems: items, setTrackerItems: setI
   };
 
   return (
-    <div className="flex flex-col h-full">
-      {/* Subheader + totals */}
+    <div className="flex flex-col h-full overflow-y-auto overscroll-contain">
+      {/* Subheader + totals: ya no queda fijo — se desplaza junto con la
+          lista, para que bajar dé más espacio a los productos y subir
+          vuelva a mostrar los totales, tal como lo pidió el usuario. */}
       <div className="bg-brand-dark-hover px-4 pt-3 pb-4 space-y-3">
         <h2 className="text-white font-bold text-lg">Carrito de Compras</h2>
 
@@ -535,9 +537,9 @@ export default function CostTracker({ trackerItems: items, setTrackerItems: setI
       </div>
 
       {/* Items list */}
-      <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-4 py-3 space-y-2 bg-brand-lime-soft">
+      <div className="px-4 py-3 space-y-2 bg-brand-lime-soft">
         {items.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-gray-400 gap-3 py-16">
+          <div className="flex flex-col items-center justify-center text-gray-400 gap-3 py-16">
             <DollarSign size={48} strokeWidth={1} />
             <p className="text-base">Sin productos aún</p>
             <p className="text-sm">Agrega productos para calcular el total</p>
