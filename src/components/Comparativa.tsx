@@ -401,7 +401,7 @@ function PriceComparison() {
       {/* Escanear */}
       <button
         onClick={() => setShowScanner(true)}
-        className="w-full bg-green-700 text-white rounded-2xl py-3 flex items-center justify-center gap-2 font-semibold text-sm hover:bg-green-600 transition-colors"
+        className="w-full bg-brand-dark text-white rounded-full py-3 flex items-center justify-center gap-2 font-semibold text-sm hover:bg-brand-dark-hover transition-colors shadow-md"
       >
         <Camera size={18} /> Escanear producto
       </button>
@@ -535,19 +535,19 @@ export default function Comparativa() {
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="bg-[#14532d] px-4 pt-3 pb-4 flex-shrink-0 space-y-3">
+      <div className="bg-brand-dark-hover px-4 pt-3 pb-4 flex-shrink-0 space-y-3">
         <h2 className="text-white font-bold text-lg">Comparativa</h2>
         {/* Selector de modo */}
         <div className="flex bg-green-900 bg-opacity-60 rounded-xl p-1 gap-1">
           <button
             onClick={() => setMode('proporciones')}
-            className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-semibold transition-all ${mode === 'proporciones' ? 'bg-white text-[#166534] shadow-sm' : 'text-green-300'}`}
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-semibold transition-all ${mode === 'proporciones' ? 'bg-white text-brand-dark shadow-sm' : 'text-green-300'}`}
           >
             <Scale size={14} /> Por Proporciones
           </button>
           <button
             onClick={() => setMode('precios')}
-            className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-semibold transition-all ${mode === 'precios' ? 'bg-white text-[#166534] shadow-sm' : 'text-green-300'}`}
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-semibold transition-all ${mode === 'precios' ? 'bg-white text-brand-dark shadow-sm' : 'text-green-300'}`}
           >
             <Store size={14} /> Por Establecimientos
           </button>
@@ -555,7 +555,7 @@ export default function Comparativa() {
       </div>
 
       {/* Contenido */}
-      <div className="flex-1 overflow-y-auto px-4 py-4 bg-[#f0fdf4]">
+      <div className="flex-1 overflow-y-auto px-4 py-4 bg-brand-lime-soft">
         {mode === 'proporciones' ? <PropComparison /> : <PriceComparison />}
       </div>
     </div>

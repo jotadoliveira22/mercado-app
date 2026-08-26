@@ -217,7 +217,7 @@ export default function App() {
   // Still checking auth
   if (user === undefined) {
     return (
-      <div className="flex items-center justify-center h-screen bg-[#f0fdf4]">
+      <div className="flex items-center justify-center h-screen bg-brand-lime-soft">
         <Loader size={32} className="animate-spin text-green-700" />
       </div>
     );
@@ -235,9 +235,9 @@ export default function App() {
       : <CloudOff size={13} className="text-red-400" />;
 
   return (
-    <div className="flex flex-col h-screen bg-[#f0fdf4] max-w-lg mx-auto relative">
+    <div className="flex flex-col h-screen bg-brand-lime max-w-lg mx-auto relative">
       {/* Top header */}
-      <header className="bg-[#166534] flex-shrink-0 px-5 py-4 flex items-center gap-4 shadow-lg">
+      <header className="bg-brand-dark flex-shrink-0 px-5 py-4 flex items-center gap-4 shadow-lg rounded-b-3xl">
         <div className="bg-white rounded-2xl p-2 shadow-md flex-shrink-0">
           <img src="/logo.png" alt="MarktPlan" className="h-16 w-16 object-contain" />
         </div>
@@ -280,7 +280,7 @@ export default function App() {
       </div>
 
       {/* Bottom nav */}
-      <nav className="bg-[#166534] flex-shrink-0 px-2 py-1 shadow-[0_-2px_16px_rgba(0,0,0,0.2)]">
+      <nav className="bg-brand-dark flex-shrink-0 mx-3 mb-3 mt-1 px-2 py-1.5 rounded-3xl shadow-[0_8px_24px_rgba(0,0,0,0.25)]">
         <div className="flex">
           {TABS.map(({ id, icon: Icon, label }) => {
             const active = activeTab === id;
@@ -290,10 +290,10 @@ export default function App() {
                 onClick={() => setActiveTab(id)}
                 className="flex-1 flex flex-col items-center gap-0.5 py-2 px-1 transition-all"
               >
-                <div className={`flex items-center justify-center w-11 h-7 rounded-xl transition-all ${active ? 'bg-white' : ''}`}>
-                  <Icon size={18} className={active ? 'text-[#166534]' : 'text-green-300'} />
+                <div className={`flex items-center justify-center w-11 h-9 rounded-full transition-all ${active ? 'bg-brand-lime' : ''}`}>
+                  <Icon size={18} className={active ? 'text-brand-dark' : 'text-green-300'} />
                 </div>
-                <span className={`text-[10px] font-bold transition-colors ${active ? 'text-white' : 'text-green-400'}`}>
+                <span className={`text-[10px] font-bold transition-colors ${active ? 'text-brand-lime' : 'text-green-400'}`}>
                   {label}
                 </span>
               </button>

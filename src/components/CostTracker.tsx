@@ -286,7 +286,7 @@ export default function CostTracker({ trackerItems: items, setTrackerItems: setI
   return (
     <div className="flex flex-col h-full">
       {/* Subheader + totals */}
-      <div className="bg-[#14532d] px-4 pt-3 pb-4 space-y-3">
+      <div className="bg-brand-dark-hover px-4 pt-3 pb-4 space-y-3">
         <h2 className="text-white font-bold text-lg">Carrito de Compras</h2>
 
         {/* Selector de establecimiento */}
@@ -301,9 +301,9 @@ export default function CostTracker({ trackerItems: items, setTrackerItems: setI
         <div className="grid grid-cols-3 gap-2">
           <div className="bg-white rounded-2xl px-3 py-3 text-center shadow-sm">
             <p className="text-gray-400 text-[10px] font-semibold uppercase tracking-wide">Total USD</p>
-            <p className="text-[#166534] font-extrabold text-base mt-0.5">${totalUSD.toFixed(2)}</p>
+            <p className="text-brand-dark font-extrabold text-base mt-0.5">${totalUSD.toFixed(2)}</p>
           </div>
-          <div className="bg-[#166534] rounded-2xl px-3 py-3 text-center shadow-sm">
+          <div className="bg-brand-dark rounded-2xl px-3 py-3 text-center shadow-sm">
             <p className="text-green-300 text-[10px] font-semibold uppercase tracking-wide">BCV</p>
             <p className="text-white font-extrabold text-sm mt-0.5">Bs {formatBs(totalUSD, rates.bcv)}</p>
           </div>
@@ -335,7 +335,7 @@ export default function CostTracker({ trackerItems: items, setTrackerItems: setI
                   <button
                     key={r}
                     onClick={() => setCasheaRate(r)}
-                    className={`px-4 py-1 text-sm font-bold transition-colors ${casheaRate === r ? 'bg-white text-[#166534]' : 'text-white hover:bg-green-700'}`}
+                    className={`px-4 py-1 text-sm font-bold transition-colors ${casheaRate === r ? 'bg-white text-brand-dark' : 'text-white hover:bg-green-700'}`}
                   >
                     {r}%
                   </button>
@@ -345,15 +345,15 @@ export default function CostTracker({ trackerItems: items, setTrackerItems: setI
             <div className="grid grid-cols-3 gap-2">
               <div className="bg-white rounded-xl px-2 py-2 text-center">
                 <p className="text-gray-500 text-[10px] font-semibold">USD</p>
-                <p className="text-[#166534] font-bold text-sm">${casheaUSD.toFixed(2)}</p>
+                <p className="text-brand-dark font-bold text-sm">${casheaUSD.toFixed(2)}</p>
               </div>
               <div className="bg-white rounded-xl px-2 py-2 text-center">
                 <p className="text-gray-500 text-[10px] font-semibold">BCV</p>
-                <p className="text-[#166534] font-bold text-sm">Bs {formatBs(casheaUSD, rates.bcv)}</p>
+                <p className="text-brand-dark font-bold text-sm">Bs {formatBs(casheaUSD, rates.bcv)}</p>
               </div>
               <div className="bg-white rounded-xl px-2 py-2 text-center">
                 <p className="text-gray-500 text-[10px] font-semibold">USDT</p>
-                <p className="text-[#166534] font-bold text-sm">{casheaUSDT ? casheaUSDT.toFixed(4) + ' $' : '—'}</p>
+                <p className="text-brand-dark font-bold text-sm">{casheaUSDT ? casheaUSDT.toFixed(4) + ' $' : '—'}</p>
               </div>
             </div>
           </div>
@@ -409,7 +409,7 @@ export default function CostTracker({ trackerItems: items, setTrackerItems: setI
       </div>
 
       {/* Add product form */}
-      <div className="px-4 py-3 bg-[#f0fdf4] border-b border-gray-100 space-y-2">
+      <div className="px-4 py-3 bg-brand-lime-soft border-b border-gray-100 space-y-2">
         {/* Row 1: name + camera */}
         <div className="flex gap-2">
           <input
@@ -534,7 +534,7 @@ export default function CostTracker({ trackerItems: items, setTrackerItems: setI
       </div>
 
       {/* Items list */}
-      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2 bg-[#f0fdf4]">
+      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2 bg-brand-lime-soft">
         {items.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-gray-400 gap-3 py-16">
             <DollarSign size={48} strokeWidth={1} />
@@ -639,7 +639,7 @@ export default function CostTracker({ trackerItems: items, setTrackerItems: setI
           <button
             onClick={savePurchase}
             disabled={!selectedStore}
-            className="w-full bg-[#166534] hover:bg-[#14532d] active:bg-[#052e16] text-white rounded-2xl py-3.5 font-bold text-sm flex items-center justify-center gap-2 transition-colors shadow-md disabled:opacity-40 disabled:cursor-not-allowed"
+            className="w-full bg-brand-dark hover:bg-brand-dark-hover active:bg-brand-dark-active text-white rounded-full py-3.5 font-bold text-sm flex items-center justify-center gap-2 transition-colors shadow-md disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <Save size={18} />
             Guardar Compra

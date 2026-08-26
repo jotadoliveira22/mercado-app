@@ -253,10 +253,10 @@ export default function Reports({ savedPurchases: purchases }: Props) {
   if (purchases.length === 0) {
     return (
       <div className="flex flex-col h-full">
-        <div className="bg-[#14532d] px-4 pt-3 pb-4">
+        <div className="bg-brand-dark-hover px-4 pt-3 pb-4">
           <h2 className="text-white font-bold text-lg">Reportes</h2>
         </div>
-        <div className="flex flex-col items-center justify-center flex-1 text-gray-400 gap-3 bg-[#f0fdf4]">
+        <div className="flex flex-col items-center justify-center flex-1 text-gray-400 gap-3 bg-brand-lime-soft">
           <BarChart2 size={48} strokeWidth={1} />
           <p className="text-base">Sin compras guardadas</p>
           <p className="text-sm text-center px-8">Guarda tu primera compra desde la Calculadora</p>
@@ -268,11 +268,11 @@ export default function Reports({ savedPurchases: purchases }: Props) {
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="bg-[#14532d] px-4 pt-3 pb-4 flex-shrink-0 space-y-3">
+      <div className="bg-brand-dark-hover px-4 pt-3 pb-4 flex-shrink-0 space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="text-white font-bold text-lg">Reportes</h2>
           <div className="bg-white rounded-full px-3 py-1 shadow-sm">
-            <span className="text-[#166534] text-xs font-extrabold">${totalFiltered.toFixed(2)}</span>
+            <span className="text-brand-dark text-xs font-extrabold">${totalFiltered.toFixed(2)}</span>
           </div>
         </div>
         {/* Filtros */}
@@ -281,7 +281,7 @@ export default function Reports({ savedPurchases: purchases }: Props) {
             <button
               key={f}
               onClick={() => setFilter(f)}
-              className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${filter === f ? 'bg-white text-[#166534] shadow-sm' : 'bg-green-800 bg-opacity-60 text-green-300 border border-green-700'}`}
+              className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${filter === f ? 'bg-white text-brand-dark shadow-sm' : 'bg-green-800 bg-opacity-60 text-green-300 border border-green-700'}`}
             >
               {f === 'semana' ? 'Esta semana' : f === 'mes' ? 'Este mes' : 'Todo'}
             </button>
@@ -289,7 +289,7 @@ export default function Reports({ savedPurchases: purchases }: Props) {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto bg-[#f0fdf4]">
+      <div className="flex-1 overflow-y-auto bg-brand-lime-soft">
         {/* Calendario */}
         <div className="bg-white mx-4 mt-4 rounded-2xl shadow-sm border border-gray-100 p-4">
           <div className="flex items-center justify-between mb-3">
