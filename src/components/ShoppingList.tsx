@@ -11,6 +11,7 @@ import BarcodeScanner from './BarcodeScanner';
 import NewProductModal from './NewProductModal';
 import StoreSelect from './StoreSelect';
 import BuscadorCatalogo from './BuscadorCatalogo';
+import FotoProducto from './FotoProducto';
 
 /** Paso de ajuste: 0,1 en Kg para pesos como 0,5; 1 en unidades. */
 function paso(unidad?: Unit): number {
@@ -28,6 +29,8 @@ interface PrecioResuelto {
   origen: 'catalogo' | 'comunidad';
   /** Nombre del producto del catálogo con el que se emparejó. */
   nombre?: string;
+  /** Solo cuando el origen es 'catalogo': la foto del producto emparejado. */
+  urlImagen?: string | null;
 }
 
 interface Props {
@@ -122,7 +125,7 @@ export default function ShoppingList({ items, setItems, onMigrateToCart }: Props
       if (found !== undefined) return { precio: found, origen: 'comunidad' };
     }
     const m = mejorCoincidencia(item.name, catalogo);
-    if (m) return { precio: m.candidato.precio, origen: 'catalogo', nombre: m.candidato.nombre };
+    if (m) return { precio: m.candidato.precio, origen: 'catalogo', nombre: m.candidato.nombre, urlImagen: m.candidato.urlImagen };
     return null;
   }, [prices, catalogo]);
 
@@ -436,6 +439,12 @@ export default function ShoppingList({ items, setItems, onMigrateToCart }: Props
                               </svg>
                             )}
                           </button>
+                          {/* Solo se muestra si hay foto: en una lista de
+                              chequeo, un ícono vacío en cada fila sin
+                              coincidencia sería más ruido que ayuda. */}
+                          {store && resuelto?.urlImagen && (
+                            <FotoProducto url={resuelto.urlImagen} alt={item.name} size={32} />
+                          )}
                           <span className={`flex-1 text-sm ${item.checked ? 'line-through text-gray-400' : 'text-gray-700'}`}>
                             {item.name}
                             {/* Tocar la cantidad la vuelve editable. */}

@@ -17,6 +17,7 @@ export interface CandidatoCatalogo {
   nombreNorm: string;
   precio: number;
   presentacion?: string | null;
+  urlImagen?: string | null;
 }
 
 export interface Coincidencia {

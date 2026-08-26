@@ -6,6 +6,7 @@ import { supabase } from '../lib/supabase';
 import { buscarPrecios, fetchCatalogoPorNombre, type HitPrecio } from '../hooks/useSync';
 import { STORES } from '../constants/stores';
 import StoreSelect from './StoreSelect';
+import FotoProducto from './FotoProducto';
 
 // ─── Tipos ──────────────────────────────────────────────────────────────────
 
@@ -367,6 +368,7 @@ function PriceComparison() {
                   h.precioUsd === minHit ? 'border-green-500 bg-green-50' : 'border-gray-100 bg-white'
                 }`}
               >
+                <FotoProducto url={h.urlImagen} alt={h.nombre} size={40} />
                 <div className="flex-1 min-w-0">
                   <p className="text-sm text-gray-800 leading-snug">{h.nombre}</p>
                   <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
@@ -479,11 +481,14 @@ function PriceComparison() {
               {hitsCodigo.map((h, i) => (
                 <div
                   key={`cat-${h.establecimiento}-${i}`}
-                  className="flex items-center justify-between rounded-xl px-4 py-2.5 border border-blue-100 bg-blue-50"
+                  className="flex items-center justify-between rounded-xl px-4 py-2.5 border border-blue-100 bg-blue-50 gap-2"
                 >
-                  <div className="min-w-0">
-                    <p className="text-sm text-gray-800 leading-snug">{h.nombre}</p>
-                    <p className="text-xs font-semibold text-blue-700 mt-0.5">{h.establecimiento}</p>
+                  <div className="flex items-center gap-2 min-w-0">
+                    <FotoProducto url={h.urlImagen} alt={h.nombre} size={36} />
+                    <div className="min-w-0">
+                      <p className="text-sm text-gray-800 leading-snug">{h.nombre}</p>
+                      <p className="text-xs font-semibold text-blue-700 mt-0.5">{h.establecimiento}</p>
+                    </div>
                   </div>
                   <span className="font-bold text-sm text-gray-800 flex-shrink-0 ml-2">
                     ${h.precioUsd.toFixed(2)}
