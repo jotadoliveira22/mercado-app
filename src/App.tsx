@@ -217,7 +217,7 @@ export default function App() {
   // Still checking auth
   if (user === undefined) {
     return (
-      <div className="flex items-center justify-center h-screen bg-brand-lime-soft">
+      <div className="flex items-center justify-center h-dvh bg-brand-lime-soft">
         <Loader size={32} className="animate-spin text-green-700" />
       </div>
     );
@@ -235,7 +235,7 @@ export default function App() {
       : <CloudOff size={13} className="text-red-400" />;
 
   return (
-    <div className="flex flex-col h-screen bg-brand-lime max-w-lg mx-auto relative">
+    <div className="flex flex-col h-dvh bg-brand-lime max-w-lg mx-auto relative">
       {/* Top header: tarjeta flotante, separada de los bordes de la pantalla,
           igual que la barra de navegación inferior. */}
       <header className="bg-brand-dark flex-shrink-0 mx-3 mt-3 px-5 py-4 flex items-center gap-4 shadow-lg rounded-3xl">
@@ -259,8 +259,12 @@ export default function App() {
         </div>
       </header>
 
-      {/* Content */}
-      <div className="flex-1 overflow-hidden">
+      {/* Content: min-h-0 es necesario para que el hijo con scroll interno de
+          cada pantalla (Lista, Carrito, etc.) realmente recorte en vez de
+          crecer más allá de este espacio — sin esto, termina desplazándose
+          la página entera (encabezado y nav incluidos) en vez de solo la
+          lista de productos. */}
+      <div className="flex-1 min-h-0 overflow-hidden">
         {activeTab === 'list' && (
           <ShoppingList
             items={shoppingItems}

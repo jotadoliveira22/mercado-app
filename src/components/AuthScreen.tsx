@@ -44,7 +44,7 @@ export default function AuthScreen() {
   const switchMode = (m: Mode) => { setMode(m); setError(''); setInfo(''); setName(''); };
 
   return (
-    <div className="flex flex-col h-screen bg-brand-lime max-w-lg mx-auto">
+    <div className="flex flex-col h-dvh bg-brand-lime max-w-lg mx-auto">
       {/* Header: tarjeta flotante, separada de los bordes de la pantalla */}
       <div className="bg-brand-dark mx-3 mt-3 rounded-3xl px-6 pt-10 pb-8 flex flex-col items-center gap-4">
         <div className="bg-white rounded-3xl p-3 shadow-lg">
