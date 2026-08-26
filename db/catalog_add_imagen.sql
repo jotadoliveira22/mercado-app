@@ -10,6 +10,10 @@
 -- la vista; no toca datos.
 -- ============================================================================
 
+-- Postgres no permite insertar una columna en medio de una vista existente
+-- con CREATE OR REPLACE (solo agregar al final); por eso url_imagen va
+-- después de fecha_extraccion y no junto a categoria_app como en
+-- catalog_schema.sql, que sí crea la vista desde cero.
 CREATE OR REPLACE VIEW public.catalog_precio_vigente AS
 SELECT DISTINCT ON (p.id)
   p.id                AS product_id,
@@ -21,12 +25,12 @@ SELECT DISTINCT ON (p.id)
   p.nombre_normalizado,
   p.presentacion,
   p.categoria_app,
-  p.url_imagen,
   pr.precio_usd,
   pr.disponible,
   pr.calidad,
   b.nombre            AS sucursal,
-  pr.fecha_extraccion
+  pr.fecha_extraccion,
+  p.url_imagen
 FROM public.catalog_products p
 JOIN public.catalog_retailers r ON r.id = p.retailer_id
 JOIN public.catalog_prices  pr ON pr.product_id = p.id
