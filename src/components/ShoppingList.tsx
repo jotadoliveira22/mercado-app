@@ -268,7 +268,7 @@ export default function ShoppingList({ items, setItems, onMigrateToCart }: Props
       )}
 
       {/* Subheader */}
-      <div className="bg-[#14532d] px-4 pt-3 pb-4 space-y-3">
+      <div className="bg-brand-dark-hover px-4 pt-3 pb-4 space-y-3">
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-white font-bold text-lg">Lista de Compras</h2>
@@ -383,7 +383,7 @@ export default function ShoppingList({ items, setItems, onMigrateToCart }: Props
       </div>
 
       {/* List */}
-      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3 bg-[#f0fdf4]">
+      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3 bg-brand-lime-soft">
         {items.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-gray-400 gap-3 py-16">
             <ShoppingCart size={48} strokeWidth={1} />
@@ -576,7 +576,7 @@ export default function ShoppingList({ items, setItems, onMigrateToCart }: Props
         <div className="flex-shrink-0 px-4 py-3 bg-white border-t border-gray-100">
           <button
             onClick={migrateToCart}
-            className="w-full bg-green-700 hover:bg-green-600 active:bg-green-800 text-white font-bold rounded-xl py-3 flex items-center justify-center gap-2 transition-colors"
+            className="w-full bg-brand-dark hover:bg-brand-dark-hover active:bg-brand-dark-active text-white font-bold rounded-full py-3 flex items-center justify-center gap-2 transition-colors shadow-md"
           >
             <ShoppingBag size={18} />
             Continuar a carrito

@@ -44,9 +44,9 @@ export default function AuthScreen() {
   const switchMode = (m: Mode) => { setMode(m); setError(''); setInfo(''); setName(''); };
 
   return (
-    <div className="flex flex-col h-screen bg-[#f0fdf4] max-w-lg mx-auto">
+    <div className="flex flex-col h-screen bg-brand-lime max-w-lg mx-auto">
       {/* Header */}
-      <div className="bg-[#166534] px-6 pt-12 pb-10 flex flex-col items-center gap-4">
+      <div className="bg-brand-dark px-6 pt-12 pb-10 flex flex-col items-center gap-4">
         <div className="bg-white rounded-3xl p-3 shadow-lg">
           <img src="/logo.png" alt="MarktPlan" className="h-20 w-20 object-contain" />
         </div>
@@ -86,7 +86,7 @@ export default function AuthScreen() {
                 onKeyDown={e => e.key === 'Enter' && handle()}
                 placeholder="Tu nombre completo"
                 autoComplete="name"
-                className="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                className="w-full bg-white border border-gray-200 rounded-2xl px-4 py-3 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
               />
             </div>
           )}
@@ -101,7 +101,7 @@ export default function AuthScreen() {
               onKeyDown={e => e.key === 'Enter' && handle()}
               placeholder="tu@correo.com"
               autoComplete="email"
-              className="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+              className="w-full bg-white border border-gray-200 rounded-2xl px-4 py-3 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
             />
           </div>
           <div>
@@ -115,7 +115,7 @@ export default function AuthScreen() {
               onKeyDown={e => e.key === 'Enter' && handle()}
               placeholder="Mínimo 6 caracteres"
               autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
-              className="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+              className="w-full bg-white border border-gray-200 rounded-2xl px-4 py-3 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
             />
           </div>
         </div>
@@ -123,7 +123,7 @@ export default function AuthScreen() {
         <button
           onClick={handle}
           disabled={loading}
-          className="w-full bg-[#166534] hover:bg-[#14532d] active:bg-[#052e16] text-white font-bold rounded-2xl py-4 text-sm transition-colors shadow-md disabled:opacity-60 mt-2"
+          className="w-full bg-brand-dark hover:bg-brand-dark-hover active:bg-brand-dark-active text-white font-bold rounded-full py-4 text-sm transition-colors shadow-md disabled:opacity-60 mt-2"
         >
           {loading ? 'Cargando...' : mode === 'login' ? 'Entrar' : 'Crear cuenta'}
         </button>

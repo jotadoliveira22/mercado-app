@@ -1,1 +1,19 @@
 @import "tailwindcss";
+
+/**
+ * Paleta de marca — inspirada en el estilo "Paymal" que pidió el usuario:
+ * verde lima brillante de fondo, tarjetas blancas, acentos en verde oscuro
+ * casi negro. Tokens con nombre en vez de hex sueltos por archivo, para que
+ * el próximo ajuste de color se haga en un solo lugar.
+ */
+@theme {
+  --color-brand-lime: #c6ed4f;
+  --color-brand-lime-soft: #e8f9be;
+  --color-brand-dark: #123817;
+  --color-brand-dark-hover: #0d2b11;
+  --color-brand-dark-active: #081f0a;
+}
+
+body {
+  background-color: var(--color-brand-lime);
+}
