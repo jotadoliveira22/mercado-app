@@ -2,9 +2,12 @@ import { useState, useCallback, useRef } from 'react';
 import { Plus, Trash2, Edit2, Check, X, RefreshCw, Camera, DollarSign, AlertCircle, CreditCard, Save, Search } from 'lucide-react';
 import type { TrackerItem, ExchangeRates, Unit, SavedPurchase } from '../types';
 import { useExchangeRates } from '../hooks/useExchangeRates';
-import { pushPricesToComparative, fetchCatalogoDeTienda } from '../hooks/useSync';
-import { type CandidatoCatalogo } from '../utils/matchProducto';
+import { pushPricesToComparative, fetchCatalogoDeTienda, fetchStorePrices } from '../hooks/useSync';
+import { mejorCoincidencia, type CandidatoCatalogo } from '../utils/matchProducto';
+import { priceKeyCandidates } from '../utils/priceKey';
 import { cantidadFacturable, formatearPeso } from '../utils/pesosUnitarios';
+
+type OrigenPrecio = 'comunidad' | 'catalogo';
 
 interface Props {
   trackerItems: TrackerItem[];
@@ -53,8 +56,12 @@ export default function CostTracker({ trackerItems: items, setTrackerItems: setI
   const [showCashea, setShowCashea] = useState(false);
 
   const [selectedStore, setSelectedStore] = useState('');
-  // Catálogo del establecimiento, para el buscador. Se carga al elegir tienda.
+  // Catálogo del establecimiento, para el buscador y el autocompletado de
+  // precio. Se carga al elegir tienda.
   const [catalogo, setCatalogo] = useState<CandidatoCatalogo[]>([]);
+  // Precios aportados por la comunidad (por código de barras), misma fuente
+  // que usa la Lista. Se prefieren sobre el catálogo por ser exactos.
+  const [preciosComunidad, setPreciosComunidad] = useState<Map<string, number>>(new Map());
   const [cargandoCatalogo, setCargandoCatalogo] = useState(false);
   const [showBuscador, setShowBuscador] = useState(false);
   const pedidoCatalogo = useRef(0);
@@ -65,6 +72,10 @@ export default function CostTracker({ trackerItems: items, setTrackerItems: setI
   const [loadingProduct, setLoadingProduct] = useState(false);
   // Código del último escaneo, para guardarlo junto al producto.
   const [scannedBarcode, setScannedBarcode] = useState<string | undefined>(undefined);
+  // De dónde salió el precio que está en el formulario ahora mismo, para
+  // avisarle al usuario que lo revise en vez de dar por hecho que es exacto.
+  // Se borra en cuanto el usuario toca el campo de precio a mano.
+  const [precioOrigen, setPrecioOrigen] = useState<OrigenPrecio | null>(null);
   // Kg weight accumulator
   const [kgParcials, setKgParcials] = useState<number[]>([]);
   const kgInputRef = useRef<HTMLInputElement>(null);
@@ -73,13 +84,60 @@ export default function CostTracker({ trackerItems: items, setTrackerItems: setI
     const pedido = ++pedidoCatalogo.current;
     setSelectedStore(next);
     setCatalogo([]);
+    setPreciosComunidad(new Map());
     if (!next) return;
     setCargandoCatalogo(true);
-    const cat = await fetchCatalogoDeTienda(next);
+    const [cat, precios] = await Promise.all([
+      fetchCatalogoDeTienda(next),
+      fetchStorePrices(next),
+    ]);
     if (pedidoCatalogo.current !== pedido) return; // llegó tarde, ya hay otro
     setCatalogo(cat);
+    setPreciosComunidad(precios ?? new Map());
     setCargandoCatalogo(false);
   }, []);
+
+  /**
+   * Precio conocido para un producto en el establecimiento elegido, o null.
+   *
+   * Primero los aportes de la comunidad, que se cruzan por código de barras y
+   * por tanto son exactos. Si no hay, se busca en el catálogo por nombre —
+   * mismo orden de prioridad que usa la Lista, para que el precio que ve el
+   * usuario no dependa de en qué pantalla esté.
+   */
+  const resolverPrecio = useCallback((nombre: string, barcode?: string): { precio: number; origen: OrigenPrecio } | null => {
+    if (barcode) {
+      for (const key of priceKeyCandidates({ barcode, name: nombre })) {
+        const found = preciosComunidad.get(key);
+        if (found !== undefined) return { precio: found, origen: 'comunidad' };
+      }
+    }
+    const m = mejorCoincidencia(nombre, catalogo);
+    if (m) return { precio: m.candidato.precio, origen: 'catalogo' };
+    return null;
+  }, [preciosComunidad, catalogo]);
+
+  /**
+   * Rellena el precio si se conoce y el usuario no lo ha tocado a mano.
+   *
+   * Es el corazón de la mejora: el usuario escanea o escribe el nombre, y si
+   * ya sabemos el precio no tiene que teclearlo — solo confirmarlo o
+   * corregirlo si cambió. Nunca pisa un precio que el usuario ya escribió.
+   */
+  const autocompletarPrecio = useCallback((nombre: string, barcode?: string) => {
+    if (!nombre.trim() || !selectedStore) return;
+    const resuelto = resolverPrecio(nombre, barcode);
+    if (!resuelto) { setPrecioOrigen(null); return; }
+    let aplicado = false;
+    setForm(prev => {
+      // No pisa un precio que el usuario ya haya escrito a mano: solo rellena
+      // cuando el campo está vacío o el precio actual también vino de aquí.
+      if (prev.unitPrice.trim() && precioOrigen === null) return prev;
+      aplicado = true;
+      return { ...prev, unitPrice: String(resuelto.precio) };
+    });
+    if (aplicado) setPrecioOrigen(resuelto.origen);
+  }, [selectedStore, resolverPrecio, precioOrigen]);
 
   /**
    * Producto elegido del buscador: rellena nombre y precio del catálogo.
@@ -91,6 +149,7 @@ export default function CostTracker({ trackerItems: items, setTrackerItems: setI
   const usarDelCatalogo = (producto: CandidatoCatalogo) => {
     setShowBuscador(false);
     setScannedBarcode(undefined);
+    setPrecioOrigen('catalogo');
     setForm(prev => ({
       ...prev,
       name: producto.nombre,
@@ -123,10 +182,11 @@ export default function CostTracker({ trackerItems: items, setTrackerItems: setI
     setScannedBarcode(barcode);
     if (name) {
       setForm(prev => ({ ...prev, name }));
+      autocompletarPrecio(name, barcode);
     } else {
       setUnknownBarcode(barcode);
     }
-  }, []);
+  }, [autocompletarPrecio]);
 
   const kgTotal = kgParcials.reduce((s, v) => s + v, 0);
 
@@ -161,6 +221,7 @@ export default function CostTracker({ trackerItems: items, setTrackerItems: setI
     setForm({ name: '', quantity: '', unitPrice: '', unit: form.unit });
     setKgParcials([]);
     setScannedBarcode(undefined);
+    setPrecioOrigen(null);
   };
 
   const savePurchase = () => {
@@ -230,6 +291,11 @@ export default function CostTracker({ trackerItems: items, setTrackerItems: setI
 
         {/* Selector de establecimiento */}
         <StoreSelect value={selectedStore} onChange={cambiarTienda} />
+        {!selectedStore && (
+          <p className="text-green-200 text-xs -mt-1.5">
+            Elige el establecimiento para que el precio se rellene solo al escanear.
+          </p>
+        )}
 
         {/* Total cards */}
         <div className="grid grid-cols-3 gap-2">
@@ -354,7 +420,9 @@ export default function CostTracker({ trackerItems: items, setTrackerItems: setI
               // Editar el nombre a mano desliga el código escaneado: pegarlo a
               // otro producto ensuciaría los precios compartidos.
               setScannedBarcode(undefined);
+              setPrecioOrigen(null);
             }}
+            onBlur={e => autocompletarPrecio(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && addItem()}
             placeholder="Nombre del producto"
             disabled={loadingProduct}
@@ -409,12 +477,18 @@ export default function CostTracker({ trackerItems: items, setTrackerItems: setI
           <input
             type="number"
             value={form.unitPrice}
-            onChange={e => setForm(prev => ({ ...prev, unitPrice: e.target.value }))}
+            onChange={e => {
+              setForm(prev => ({ ...prev, unitPrice: e.target.value }));
+              // El usuario tomó el control del precio: ya no es "sugerido".
+              setPrecioOrigen(null);
+            }}
             onKeyDown={e => e.key === 'Enter' && addItem()}
             placeholder="Precio $"
             min="0"
             step="0.01"
-            className="flex-1 min-w-0 border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+            className={`flex-1 min-w-0 border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 ${
+              precioOrigen ? 'border-green-400 bg-green-50' : 'border-gray-300'
+            }`}
           />
           <button
             onClick={addItem}
@@ -423,6 +497,16 @@ export default function CostTracker({ trackerItems: items, setTrackerItems: setI
             <Plus size={18} />
           </button>
         </div>
+
+        {/* Aviso de dónde salió el precio sugerido: hay que confirmarlo, no
+            es necesariamente el precio de hoy en la góndola. */}
+        {precioOrigen && (
+          <p className="text-[11px] text-green-700 leading-snug -mt-1">
+            {precioOrigen === 'comunidad'
+              ? '✓ Precio reportado por otro usuario — verifica y edita si cambió.'
+              : '✓ Precio del catálogo — verifica y edita si cambió.'}
+          </p>
+        )}
 
         {/* Kg accumulator chips */}
         {form.unit === 'Kg' && kgParcials.length > 0 && (
@@ -583,7 +667,11 @@ export default function CostTracker({ trackerItems: items, setTrackerItems: setI
       {unknownBarcode && (
         <NewProductModal
           barcode={unknownBarcode}
-          onConfirm={name => { setForm(prev => ({ ...prev, name })); setUnknownBarcode(null); }}
+          onConfirm={name => {
+            setForm(prev => ({ ...prev, name }));
+            autocompletarPrecio(name, unknownBarcode);
+            setUnknownBarcode(null);
+          }}
           onCancel={() => { setForm(prev => ({ ...prev, name: unknownBarcode })); setUnknownBarcode(null); }}
         />
       )}
