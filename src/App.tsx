@@ -236,8 +236,9 @@ export default function App() {
 
   return (
     <div className="flex flex-col h-screen bg-brand-lime max-w-lg mx-auto relative">
-      {/* Top header */}
-      <header className="bg-brand-dark flex-shrink-0 px-5 py-4 flex items-center gap-4 shadow-lg rounded-b-3xl">
+      {/* Top header: tarjeta flotante, separada de los bordes de la pantalla,
+          igual que la barra de navegación inferior. */}
+      <header className="bg-brand-dark flex-shrink-0 mx-3 mt-3 px-5 py-4 flex items-center gap-4 shadow-lg rounded-3xl">
         <div className="bg-white rounded-2xl p-2 shadow-md flex-shrink-0">
           <img src="/logo.png" alt="MarktPlan" className="h-16 w-16 object-contain" />
         </div>

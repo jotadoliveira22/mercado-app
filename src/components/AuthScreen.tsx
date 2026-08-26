@@ -45,8 +45,8 @@ export default function AuthScreen() {
 
   return (
     <div className="flex flex-col h-screen bg-brand-lime max-w-lg mx-auto">
-      {/* Header */}
-      <div className="bg-brand-dark px-6 pt-12 pb-10 flex flex-col items-center gap-4">
+      {/* Header: tarjeta flotante, separada de los bordes de la pantalla */}
+      <div className="bg-brand-dark mx-3 mt-3 rounded-3xl px-6 pt-10 pb-8 flex flex-col items-center gap-4">
         <div className="bg-white rounded-3xl p-3 shadow-lg">
           <img src="/logo.png" alt="MarktPlan" className="h-20 w-20 object-contain" />
         </div>
