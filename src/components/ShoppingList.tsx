@@ -2,7 +2,7 @@ import { useState, useMemo, useCallback, useRef, Fragment } from 'react';
 import { Plus, Minus, Trash2, ChevronDown, ChevronRight, ShoppingCart, ScanLine, ShoppingBag, Loader, Search } from 'lucide-react';
 import type { ShoppingItem, Category, Unit } from '../types';
 import { categorizeProduct } from '../utils/categorize';
-import { lookupBarcode } from '../utils/lookupBarcode';
+import { lookupBarcode, lookupBarcodeImage } from '../utils/lookupBarcode';
 import { priceKeyCandidates } from '../utils/priceKey';
 import { fetchStorePrices, fetchCatalogoDeTienda } from '../hooks/useSync';
 import { mejorCoincidencia, type CandidatoCatalogo } from '../utils/matchProducto';
@@ -84,6 +84,9 @@ export default function ShoppingList({ items, setItems, onMigrateToCart }: Props
   const [unknownBarcode, setUnknownBarcode] = useState<string | null>(null);
   // Código del último escaneo, para guardarlo junto al producto.
   const [scannedBarcode, setScannedBarcode] = useState<string | undefined>(undefined);
+  // Foto de Open Food Facts del último código escaneado, solo mientras se
+  // arma el producto: no se persiste, así que desaparece al agregarlo.
+  const [scannedImage, setScannedImage] = useState<string | null>(null);
   const [showBuscador, setShowBuscador] = useState(false);
   // Producto cuya cantidad se está editando dentro de la lista.
   const [editandoId, setEditandoId] = useState<string | null>(null);
@@ -172,6 +175,7 @@ export default function ShoppingList({ items, setItems, onMigrateToCart }: Props
     };
     setItems(prev => [...prev, newItem]);
     setInput('');
+    setScannedImage(null);
     setQuantity('1');
     setScannedBarcode(undefined);
   };
@@ -185,6 +189,9 @@ export default function ShoppingList({ items, setItems, onMigrateToCart }: Props
     setScannedBarcode(barcode);
     if (name) {
       setInput(name);
+      // No bloquea el formulario: la foto puede tardar o no existir, y el
+      // usuario ya puede seguir completando cantidad y unidad mientras llega.
+      lookupBarcodeImage(barcode).then(setScannedImage);
     } else {
       setUnknownBarcode(barcode);
     }
@@ -323,6 +330,9 @@ export default function ShoppingList({ items, setItems, onMigrateToCart }: Props
       {/* Add item */}
       <div className="px-4 py-3 bg-white border-b border-gray-100 space-y-2">
         <div className="flex gap-2">
+          {scannedImage && (
+            <FotoProducto url={scannedImage} alt={input} size={40} />
+          )}
           <input
             type="text"
             value={loadingProduct ? 'Buscando producto...' : input}
@@ -331,6 +341,7 @@ export default function ShoppingList({ items, setItems, onMigrateToCart }: Props
               // Editar el nombre a mano desliga el código escaneado: pegarlo a
               // otro producto ensuciaría los precios compartidos.
               setScannedBarcode(undefined);
+              setScannedImage(null);
             }}
             onKeyDown={e => e.key === 'Enter' && addItem()}
             placeholder="Agregar producto..."

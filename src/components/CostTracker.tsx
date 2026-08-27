@@ -15,7 +15,7 @@ interface Props {
   savedPurchases: SavedPurchase[];
   setSavedPurchases: (val: SavedPurchase[] | ((prev: SavedPurchase[]) => SavedPurchase[])) => void;
 }
-import { lookupBarcode } from '../utils/lookupBarcode';
+import { lookupBarcode, lookupBarcodeImage } from '../utils/lookupBarcode';
 import { categorizeProduct } from '../utils/categorize';
 import BarcodeScanner from './BarcodeScanner';
 import NewProductModal from './NewProductModal';
@@ -73,6 +73,9 @@ export default function CostTracker({ trackerItems: items, setTrackerItems: setI
   const [loadingProduct, setLoadingProduct] = useState(false);
   // Código del último escaneo, para guardarlo junto al producto.
   const [scannedBarcode, setScannedBarcode] = useState<string | undefined>(undefined);
+  // Foto de Open Food Facts del último código escaneado, solo mientras se
+  // arma el producto: no se persiste, así que desaparece al agregarlo.
+  const [scannedImage, setScannedImage] = useState<string | null>(null);
   // De dónde salió el precio que está en el formulario ahora mismo, para
   // avisarle al usuario que lo revise en vez de dar por hecho que es exacto.
   // Se borra en cuanto el usuario toca el campo de precio a mano.
@@ -150,6 +153,7 @@ export default function CostTracker({ trackerItems: items, setTrackerItems: setI
   const usarDelCatalogo = (producto: CandidatoCatalogo) => {
     setShowBuscador(false);
     setScannedBarcode(undefined);
+    setScannedImage(null);
     setPrecioOrigen('catalogo');
     setForm(prev => ({
       ...prev,
@@ -184,6 +188,9 @@ export default function CostTracker({ trackerItems: items, setTrackerItems: setI
     if (name) {
       setForm(prev => ({ ...prev, name }));
       autocompletarPrecio(name, barcode);
+      // No bloquea el formulario: la foto puede tardar o no existir, y el
+      // usuario ya puede seguir completando cantidad y precio mientras llega.
+      lookupBarcodeImage(barcode).then(setScannedImage);
     } else {
       setUnknownBarcode(barcode);
     }
@@ -222,6 +229,7 @@ export default function CostTracker({ trackerItems: items, setTrackerItems: setI
     setForm({ name: '', quantity: '', unitPrice: '', unit: form.unit });
     setKgParcials([]);
     setScannedBarcode(undefined);
+    setScannedImage(null);
     setPrecioOrigen(null);
   };
 
@@ -415,6 +423,9 @@ export default function CostTracker({ trackerItems: items, setTrackerItems: setI
       <div className="px-4 py-3 bg-brand-lime-soft border-b border-gray-100 space-y-2">
         {/* Row 1: name + camera */}
         <div className="flex gap-2">
+          {scannedImage && (
+            <FotoProducto url={scannedImage} alt={form.name} size={40} />
+          )}
           <input
             type="text"
             value={loadingProduct ? 'Buscando producto...' : form.name}
@@ -423,6 +434,7 @@ export default function CostTracker({ trackerItems: items, setTrackerItems: setI
               // Editar el nombre a mano desliga el código escaneado: pegarlo a
               // otro producto ensuciaría los precios compartidos.
               setScannedBarcode(undefined);
+              setScannedImage(null);
               setPrecioOrigen(null);
             }}
             onBlur={e => autocompletarPrecio(e.target.value)}

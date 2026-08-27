@@ -1,6 +1,11 @@
 const SUPABASE_URL = 'https://sjhvwraukqaebewytmln.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNqaHZ3cmF1a3FhZWJld3l0bWxuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE4MDkxMDksImV4cCI6MjA5NzM4NTEwOX0.kEYjPlnlOoNy70GmRaJic7-FhMxuCb3jFidx1aKebhU';
 const CACHE_KEY = 'custom-products-cache';
+/** Fotos de Open Food Facts por código de barras, cacheadas aparte del nombre:
+ * no todo código con nombre resuelto pasó por OFF (puede venir de
+ * custom_products o de la BD venezolana), así que la foto no siempre está
+ * disponible al mismo tiempo que el nombre. */
+const IMAGE_CACHE_KEY = 'barcode-images-cache';
 
 /**
  * Tope de espera por consulta.
@@ -34,6 +39,17 @@ function getCache(): Record<string, string> {
 }
 function setCache(db: Record<string, string>) {
   localStorage.setItem(CACHE_KEY, JSON.stringify(db));
+}
+
+function getImageCache(): Record<string, string> {
+  try { return JSON.parse(localStorage.getItem(IMAGE_CACHE_KEY) ?? '{}'); } catch { return {}; }
+}
+function cacheImage(barcode: string, url: string) {
+  try {
+    const cache = getImageCache();
+    cache[barcode] = url;
+    localStorage.setItem(IMAGE_CACHE_KEY, JSON.stringify(cache));
+  } catch { /* sin almacenamiento disponible */ }
 }
 
 // Guarda en Supabase (compartido) + cache local
@@ -105,11 +121,13 @@ export async function lookupBarcode(barcode: string): Promise<string> {
     if (res.ok) {
       const data = await res.json();
       const name = data?.product?.product_name_es || data?.product?.product_name || '';
+      const imagen = data?.product?.image_front_url || data?.product?.image_url || '';
+      if (imagen) cacheImage(barcode, imagen);
       if (name) return name;
     }
   } catch { /* continúa */ }
 
-  // 4. UPC Item DB
+  // 4. UPC Item DB (sin foto: ese servicio no expone imágenes)
   try {
     const res = await fetchConTope(`https://api.upcitemdb.com/prod/trial/lookup?upc=${barcode}`);
     if (res.ok) {
@@ -120,4 +138,27 @@ export async function lookupBarcode(barcode: string): Promise<string> {
   } catch { /* continúa */ }
 
   return '';
+}
+
+/**
+ * Foto del producto para un código de barras, o null si no se conoce.
+ *
+ * Se llama después de `lookupBarcode`: si ese ya consultó Open Food Facts,
+ * la foto queda en cache y esto no hace ninguna petición extra. Solo si el
+ * nombre vino de otra fuente (custom_products o la BD venezolana) hace falta
+ * consultar Open Food Facts aparte, únicamente por la imagen.
+ */
+export async function lookupBarcodeImage(barcode: string): Promise<string | null> {
+  const cache = getImageCache();
+  if (cache[barcode]) return cache[barcode];
+
+  try {
+    const res = await fetchConTope(`https://world.openfoodfacts.org/api/v0/product/${barcode}.json`);
+    if (res.ok) {
+      const data = await res.json();
+      const imagen = data?.product?.image_front_url || data?.product?.image_url || '';
+      if (imagen) { cacheImage(barcode, imagen); return imagen; }
+    }
+  } catch { /* sin red o sin resultado: no hay foto */ }
+  return null;
 }
