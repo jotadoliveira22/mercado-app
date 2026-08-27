@@ -1,19 +1,23 @@
 #!/usr/bin/env node
 /**
- * Rellena catalog_products.url_imagen para Farmatodo visitando la página de
- * cada producto que ya tenemos guardada (catalog_products.url_producto).
+ * Rellena catalog_products.url_imagen visitando la página de cada producto
+ * que ya tenemos guardada (catalog_products.url_producto), para cualquier
+ * cadena que NO esté detrás de un WAF que bloquee peticiones simples.
  *
- * Por qué hace falta un script aparte: la importación del Excel v10 nunca
- * trajo foto para Farmatodo (esa columna no existe en la fuente), pero sí
- * guardamos la URL de cada producto. A diferencia de Automercados Plaza,
- * Farmatodo no está detrás de un WAF que bloquee `fetch` — el extractor
- * manual (extensión de Chrome) ya lo confirmó usando fetch simple, así que
- * este script no necesita navegador headless.
+ * Sirve para Farmatodo, Central Madeirense y Gama: sus catálogos llegan sin
+ * foto (el Excel v10 no traía esa columna, o el scraper semanal solo tocó
+ * una sucursal y dejó el resto sin actualizar), pero las tres se pueden leer
+ * con `fetch` normal — se confirmó con Farmatodo y con que el scraper
+ * semanal de Central Madeirense/Gama ya usa fetch simple contra sus APIs.
+ *
+ * NO sirve para Automercados Plaza ni PedidosYa: esas sí están bloqueadas
+ * (Plaza por un WAF tipo Cloudflare, PedidosYa por ser contenido que solo
+ * existe tras ejecutar JavaScript) y necesitan navegador headless.
  *
  * Uso:
- *   npm run backfill:imagenes -- --dry-run       (solo cuenta, no escribe)
- *   npm run backfill:imagenes -- --limit 50       (prueba con pocas filas)
- *   npm run backfill:imagenes                     (corre todo lo pendiente)
+ *   npm run backfill:imagenes -- --retailer farmatodo --dry-run
+ *   npm run backfill:imagenes -- --retailer central-madeirense --limit 50
+ *   npm run backfill:imagenes -- --retailer gama
  *
  * Requiere en el entorno (.env local, o secreto de GitHub Actions):
  *   SUPABASE_SERVICE_ROLE_KEY=eyJ...
@@ -57,12 +61,12 @@ async function sbRequest(path, { method = 'GET', body, headers = {}, key }) {
   return text ? JSON.parse(text) : null;
 }
 
-async function pendientes(key, limite) {
+async function pendientes(key, retailer, limite) {
   const filas = [];
   for (let offset = 0; ; offset += PAGE) {
     const params = new URLSearchParams({
       select: 'id,url_producto',
-      retailer_id: 'eq.farmatodo',
+      retailer_id: `eq.${retailer}`,
       url_imagen: 'is.null',
       url_producto: 'not.is.null',
       limit: String(Math.min(PAGE, limite ? limite - filas.length : PAGE)),
@@ -149,12 +153,25 @@ async function mapConConcurrencia(items, limite, worker) {
   process.stdout.write(`\r   ${items.length}/${items.length}\n`);
 }
 
+const RETAILERS_PERMITIDOS = ['farmatodo', 'central-madeirense', 'gama'];
+
 async function main() {
   loadEnv();
   const args = process.argv.slice(2);
   const dryRun = args.includes('--dry-run');
   const iLimit = args.indexOf('--limit');
   const limite = iLimit >= 0 ? Number(args[iLimit + 1]) : undefined;
+  const iRetailer = args.indexOf('--retailer');
+  const retailer = iRetailer >= 0 ? args[iRetailer + 1] : undefined;
+
+  if (!retailer || !RETAILERS_PERMITIDOS.includes(retailer)) {
+    console.error(
+      `❌ Falta --retailer o no es válido. Usa uno de: ${RETAILERS_PERMITIDOS.join(', ')}\n\n` +
+      '   Automercados Plaza y PedidosYa no están en esta lista a propósito:\n' +
+      '   sus páginas están bloqueadas para fetch simple y necesitan navegador headless.\n'
+    );
+    process.exit(1);
+  }
 
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!key) {
@@ -162,9 +179,9 @@ async function main() {
     process.exit(1);
   }
 
-  console.log('🖼️  Relleno de fotos — Farmatodo\n');
+  console.log(`🖼️  Relleno de fotos — ${retailer}\n`);
   console.log('Buscando productos sin foto...');
-  const filas = await pendientes(key, limite);
+  const filas = await pendientes(key, retailer, limite);
   console.log(`   ${filas.length} productos sin foto, con página guardada.\n`);
 
   if (filas.length === 0) return;
