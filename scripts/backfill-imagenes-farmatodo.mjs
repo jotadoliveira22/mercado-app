@@ -1,0 +1,194 @@
+#!/usr/bin/env node
+/**
+ * Rellena catalog_products.url_imagen para Farmatodo visitando la página de
+ * cada producto que ya tenemos guardada (catalog_products.url_producto).
+ *
+ * Por qué hace falta un script aparte: la importación del Excel v10 nunca
+ * trajo foto para Farmatodo (esa columna no existe en la fuente), pero sí
+ * guardamos la URL de cada producto. A diferencia de Automercados Plaza,
+ * Farmatodo no está detrás de un WAF que bloquee `fetch` — el extractor
+ * manual (extensión de Chrome) ya lo confirmó usando fetch simple, así que
+ * este script no necesita navegador headless.
+ *
+ * Uso:
+ *   npm run backfill:imagenes -- --dry-run       (solo cuenta, no escribe)
+ *   npm run backfill:imagenes -- --limit 50       (prueba con pocas filas)
+ *   npm run backfill:imagenes                     (corre todo lo pendiente)
+ *
+ * Requiere en el entorno (.env local, o secreto de GitHub Actions):
+ *   SUPABASE_SERVICE_ROLE_KEY=eyJ...
+ */
+
+import { readFileSync, existsSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
+const SUPABASE_URL = 'https://sjhvwraukqaebewytmln.supabase.co';
+const TIMEOUT_MS = 15000;
+const CONCURRENCIA = 5;
+const PAUSA_MS = 150;
+const PAGE = 500;
+
+function loadEnv() {
+  const path = join(ROOT, '.env');
+  if (!existsSync(path)) return;
+  for (const line of readFileSync(path, 'utf8').split('\n')) {
+    if (line.trim().startsWith('#')) continue;
+    const m = line.match(/^\s*([\w.-]+)\s*=\s*(.*)$/);
+    if (!m) continue;
+    if (!(m[1] in process.env)) process.env[m[1]] = m[2].trim().replace(/^["']|["']$/g, '');
+  }
+}
+
+async function sbRequest(path, { method = 'GET', body, headers = {}, key }) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+    method,
+    headers: {
+      apikey: key,
+      Authorization: `Bearer ${key}`,
+      'Content-Type': 'application/json',
+      ...headers,
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const text = await res.text();
+  if (!res.ok) throw new Error(`${path} → HTTP ${res.status}: ${text.slice(0, 300)}`);
+  return text ? JSON.parse(text) : null;
+}
+
+async function pendientes(key, limite) {
+  const filas = [];
+  for (let offset = 0; ; offset += PAGE) {
+    const params = new URLSearchParams({
+      select: 'id,url_producto',
+      retailer_id: 'eq.farmatodo',
+      url_imagen: 'is.null',
+      url_producto: 'not.is.null',
+      limit: String(Math.min(PAGE, limite ? limite - filas.length : PAGE)),
+      offset: String(offset),
+    });
+    const data = await sbRequest(`catalog_products?${params}`, { key });
+    filas.push(...data);
+    if (data.length < PAGE || (limite && filas.length >= limite)) break;
+  }
+  return limite ? filas.slice(0, limite) : filas;
+}
+
+async function fetchConTope(url) {
+  const ac = new AbortController();
+  const t = setTimeout(() => ac.abort(), TIMEOUT_MS);
+  try {
+    const res = await fetch(url, {
+      headers: { Accept: 'text/html,application/xhtml+xml' },
+      signal: ac.signal,
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return await res.text();
+  } finally {
+    clearTimeout(t);
+  }
+}
+
+/** Misma lógica que extractor.js de Farmatodo: JSON-LD primero, og:image después. */
+function extraerImagen(html) {
+  const scripts = [...html.matchAll(/<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)];
+  for (const [, contenido] of scripts) {
+    try {
+      const parsed = JSON.parse(contenido);
+      const cola = Array.isArray(parsed) ? [...parsed] : [parsed];
+      while (cola.length) {
+        const item = cola.shift();
+        if (!item || typeof item !== 'object') continue;
+        if (Array.isArray(item['@graph'])) cola.push(...item['@graph']);
+        if (String(item['@type'] || '').toLowerCase() === 'product' && item.image) {
+          const img = Array.isArray(item.image) ? item.image[0] : item.image;
+          if (typeof img === 'string' && img) return img;
+        }
+      }
+    } catch { /* JSON-LD inválido: se ignora ese bloque */ }
+  }
+  const og = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i);
+  if (og) return og[1];
+  return null;
+}
+
+async function procesar(fila, key, log) {
+  try {
+    const html = await fetchConTope(fila.url_producto);
+    const imagen = extraerImagen(html);
+    if (!imagen) return { id: fila.id, encontrada: false };
+    await sbRequest(`catalog_products?id=eq.${fila.id}`, {
+      method: 'PATCH',
+      key,
+      headers: { Prefer: 'return=minimal' },
+      body: { url_imagen: imagen },
+    });
+    return { id: fila.id, encontrada: true };
+  } catch (error) {
+    log(`   ⚠️  id=${fila.id}: ${error.message}`);
+    return { id: fila.id, encontrada: false, error: true };
+  }
+}
+
+async function mapConConcurrencia(items, limite, worker) {
+  let siguiente = 0;
+  let completados = 0;
+  const corredores = Array.from({ length: Math.min(limite, items.length) }, async () => {
+    while (siguiente < items.length) {
+      const i = siguiente++;
+      await worker(items[i]);
+      completados++;
+      if (completados % 50 === 0) {
+        process.stdout.write(`\r   ${completados}/${items.length}`);
+      }
+      await new Promise(r => setTimeout(r, PAUSA_MS));
+    }
+  });
+  await Promise.all(corredores);
+  process.stdout.write(`\r   ${items.length}/${items.length}\n`);
+}
+
+async function main() {
+  loadEnv();
+  const args = process.argv.slice(2);
+  const dryRun = args.includes('--dry-run');
+  const iLimit = args.indexOf('--limit');
+  const limite = iLimit >= 0 ? Number(args[iLimit + 1]) : undefined;
+
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!key) {
+    console.error('❌ Falta SUPABASE_SERVICE_ROLE_KEY en el entorno.');
+    process.exit(1);
+  }
+
+  console.log('🖼️  Relleno de fotos — Farmatodo\n');
+  console.log('Buscando productos sin foto...');
+  const filas = await pendientes(key, limite);
+  console.log(`   ${filas.length} productos sin foto, con página guardada.\n`);
+
+  if (filas.length === 0) return;
+
+  if (dryRun) {
+    console.log('🔍 --dry-run: no se visitó ninguna página ni se escribió nada.');
+    return;
+  }
+
+  console.log('Visitando páginas de producto...');
+  const resultados = [];
+  await mapConConcurrencia(filas, CONCURRENCIA, async (fila) => {
+    resultados.push(await procesar(fila, key, console.log));
+  });
+
+  const encontradas = resultados.filter(r => r.encontrada).length;
+  const errores = resultados.filter(r => r.error).length;
+  console.log(`\n🎉 Listo: ${encontradas}/${filas.length} fotos encontradas y guardadas.`);
+  if (errores > 0) console.log(`   ⚠️  ${errores} fallaron por red o timeout — quedan pendientes para la próxima corrida.`);
+  const sinFoto = filas.length - encontradas - errores;
+  if (sinFoto > 0) console.log(`   ℹ️  ${sinFoto} páginas no traían foto (ni JSON-LD ni og:image).`);
+}
+
+main().catch(err => {
+  console.error('\n❌', err.message);
+  process.exit(1);
+});

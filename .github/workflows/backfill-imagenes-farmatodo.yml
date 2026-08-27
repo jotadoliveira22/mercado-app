@@ -1,0 +1,38 @@
+name: Rellenar fotos de Farmatodo
+
+# Solo manual: es un relleno puntual, no una tarea semanal. Correrlo de nuevo
+# no hace daño (solo toca filas sin foto), pero no hace falta programarlo.
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Solo contar cuántas filas faltan, sin escribir nada"
+        type: boolean
+        default: false
+      limit:
+        description: "Límite de productos a procesar (vacío = todos)"
+        type: string
+        default: ""
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # No se usa `npm ci`: el proyecto no versiona package-lock.json.
+      - run: npm install
+
+      - name: Rellenar fotos
+        env:
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          ARGS=""
+          if [ "${{ inputs.dry_run }}" = "true" ]; then ARGS="$ARGS --dry-run"; fi
+          if [ -n "${{ inputs.limit }}" ]; then ARGS="$ARGS --limit ${{ inputs.limit }}"; fi
+          npm run backfill:imagenes -- $ARGS
