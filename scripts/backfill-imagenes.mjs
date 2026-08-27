@@ -30,8 +30,12 @@ import { fileURLToPath } from 'node:url';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const SUPABASE_URL = 'https://sjhvwraukqaebewytmln.supabase.co';
 const TIMEOUT_MS = 15000;
-const CONCURRENCIA = 5;
-const PAUSA_MS = 150;
+// Central Madeirense empezó a responder HTTP 503 en cadena con
+// concurrencia 5 y pausa 150ms — su hosting no aguanta ese ritmo. Bajado
+// a un ritmo más conservador, con reintento cuando el sitio dice "espera".
+const CONCURRENCIA = 2;
+const PAUSA_MS = 500;
+const REINTENTOS = 3;
 const PAGE = 500;
 
 function loadEnv() {
@@ -94,6 +98,26 @@ async function fetchConTope(url) {
   }
 }
 
+/**
+ * Igual que fetchConTope, pero si el sitio responde 429/503 ("estoy
+ * saturado") espera y reintenta en vez de darlo por perdido de una — es
+ * justo lo que le pasó a Central Madeirense: no bloqueó por completo, solo
+ * pidió que bajáramos el ritmo.
+ */
+async function fetchConReintento(url) {
+  let ultimoError;
+  for (let intento = 1; intento <= REINTENTOS; intento++) {
+    try {
+      return await fetchConTope(url);
+    } catch (error) {
+      ultimoError = error;
+      if (!/HTTP (429|503)/.test(error.message)) throw error;
+      await new Promise(r => setTimeout(r, 1000 * intento));
+    }
+  }
+  throw ultimoError;
+}
+
 /** Misma lógica que extractor.js de Farmatodo: JSON-LD primero, og:image después. */
 function extraerImagen(html) {
   const scripts = [...html.matchAll(/<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)];
@@ -119,7 +143,7 @@ function extraerImagen(html) {
 
 async function procesar(fila, key, log) {
   try {
-    const html = await fetchConTope(fila.url_producto);
+    const html = await fetchConReintento(fila.url_producto);
     const imagen = extraerImagen(html);
     if (!imagen) return { id: fila.id, encontrada: false };
     await sbRequest(`catalog_products?id=eq.${fila.id}`, {
