@@ -11,7 +11,7 @@
     "backup": "node scripts/export-backup.mjs",
     "import:catalog": "tsx scripts/import-catalog.mjs",
     "scrape": "tsx scripts/scrape-and-publish.mjs",
-    "backfill:imagenes": "node scripts/backfill-imagenes-farmatodo.mjs"
+    "backfill:imagenes": "node scripts/backfill-imagenes.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.108.2",
