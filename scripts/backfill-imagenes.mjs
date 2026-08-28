@@ -88,7 +88,15 @@ async function fetchConTope(url) {
   const t = setTimeout(() => ac.abort(), TIMEOUT_MS);
   try {
     const res = await fetch(url, {
-      headers: { Accept: 'text/html,application/xhtml+xml' },
+      headers: {
+        Accept: 'text/html,application/xhtml+xml',
+        // Sin esto, Node manda su propio identificador ("node") como
+        // User-Agent: muchos sitios (o su WAF) lo tratan como bot y
+        // responden 503 sin importar qué tan lento vayamos. Con un
+        // User-Agent de navegador real, se ve como tráfico normal.
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
+        'Accept-Language': 'es-VE,es;q=0.9',
+      },
       signal: ac.signal,
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
